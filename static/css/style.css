@@ -10,6 +10,8 @@
   padding: 0;
 }
 
+.hidden { display: none !important; }
+
 :root {
   --accent:        #1B6B45;
   --accent-light:  #2D9B63;
