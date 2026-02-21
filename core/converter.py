@@ -132,39 +132,95 @@ def _convert_office_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+# ── Helper: win32com diretto (Windows) ───────────────────────────────────────
+
+def _try_win32com(docx_path: str, pdf_path: str) -> tuple:
+    """
+    Conversione tramite Word COM con soppressione completa dei dialoghi.
+    Ritorna (percorso_pdf, None) oppure (None, str_errore).
+    """
+    try:
+        import pythoncom
+        from win32com import client as win32client
+    except ImportError:
+        return None, 'win32com non disponibile'
+
+    word = None
+    try:
+        pythoncom.CoInitialize()
+        word = win32client.Dispatch('Word.Application')
+        word.Visible = False
+        word.DisplayAlerts = 0   # wdAlertsNone: nessun dialogo
+
+        doc = word.Documents.Open(
+            os.path.abspath(docx_path),
+            ReadOnly=True,
+            AddToRecentFiles=False,
+            ConfirmConversions=False,
+        )
+        try:
+            doc.SaveAs2(os.path.abspath(pdf_path), FileFormat=17)  # wdFormatPDF
+        finally:
+            doc.Close(SaveChanges=0)   # wdDoNotSaveChanges
+
+        if os.path.isfile(pdf_path) and os.path.getsize(pdf_path) > 0:
+            return pdf_path, None
+        return None, 'output PDF vuoto dopo SaveAs2'
+    except Exception as e:
+        return None, str(e)
+    finally:
+        if word is not None:
+            try:
+                word.Quit()
+            except Exception:
+                pass
+        try:
+            pythoncom.CoUninitialize()
+        except Exception:
+            pass
+
+
 # ── Helper: docx2pdf (Office COM / AppleScript) ───────────────────────────────
 
 def _try_docx2pdf(file_path: str, output_dir: str) -> tuple:
     """
-    Prova a convertire tramite Microsoft Office (COM).
+    Prova a convertire tramite Microsoft Office.
+    Su Windows usa win32com direttamente (con dialog suppression).
+    Su macOS usa docx2pdf (AppleScript).
     Ritorna (percorso_pdf, None) oppure (None, str_errore).
-    Copia il file in una posizione trusted prima di convertire per
-    evitare la Protected View di Word sui file da cartelle temp.
     """
-    import glob as _glob
-
-    # Copia in una cartella non-temp per evitare la Protected View di Word
+    # Copia in una cartella trusted per evitare la Protected View di Word
     tmp_trusted = tempfile.mkdtemp(prefix='docx2pdf_')
     try:
         trusted_copy = os.path.join(tmp_trusted, os.path.basename(file_path))
         shutil.copy2(file_path, trusted_copy)
 
-        # Su Windows rimuovi il flag "file scaricato da internet" (Zone.Identifier)
+        # Rimuovi il flag Zone.Identifier (ADS "scaricato da internet")
         if sys.platform == 'win32':
-            zone_id = trusted_copy + ':Zone.Identifier'
             try:
-                if os.path.exists(zone_id):
-                    os.remove(zone_id)
+                subprocess.run(
+                    ['powershell', '-NonInteractive', '-WindowStyle', 'Hidden',
+                     '-Command', f'Unblock-File -Path "{trusted_copy}"'],
+                    capture_output=True, timeout=10
+                )
             except Exception:
                 pass
 
-        from docx2pdf import convert as _convert
         base = os.path.splitext(os.path.basename(file_path))[0]
         dest = os.path.join(output_dir, f'{base}_{uuid.uuid4().hex[:8]}.pdf')
-        _convert(trusted_copy, dest)
-        if os.path.isfile(dest) and os.path.getsize(dest) > 0:
-            return dest, None
-        return None, 'output PDF vuoto o assente dopo la conversione'
+
+        if sys.platform == 'win32':
+            return _try_win32com(trusted_copy, dest)
+        else:
+            # macOS / Linux: usa docx2pdf (AppleScript)
+            try:
+                from docx2pdf import convert as _convert
+                _convert(trusted_copy, dest)
+                if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+                    return dest, None
+                return None, 'output PDF vuoto'
+            except Exception as e:
+                return None, str(e)
     except Exception as e:
         return None, str(e)
     finally:
@@ -183,37 +239,40 @@ def _convert_docx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
         return result
     step_errors.append(f'Office COM: {err or "?"}')
 
-    # 2) mammoth -> HTML -> weasyprint
+    # 2) mammoth -> testo -> fpdf2 (non richiede GTK/WeasyPrint)
     if ext in ('.docx', '.doc', '.rtf'):
         try:
             import mammoth
-            import weasyprint
+            from fpdf import FPDF
 
             with open(file_path, 'rb') as f:
-                doc = mammoth.convert_to_html(f)
+                raw = mammoth.extract_raw_text(f)
 
-            html = f"""<!DOCTYPE html>
-<html><head>
-<meta charset="utf-8">
-<style>
-  @page {{ margin: 2cm; }}
-  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; }}
-  table {{ border-collapse: collapse; width: 100%; margin: 8px 0; }}
-  td, th {{ border: 1px solid #aaa; padding: 3px 6px; font-size: 9pt; }}
-  img {{ max-width: 100%; }}
-  h1,h2,h3 {{ color: #1B6B45; }}
-</style>
-</head><body>{doc.value}</body></html>"""
+            text = raw.value
+            if text.strip():
+                base = os.path.splitext(os.path.basename(file_path))[0]
+                dest = os.path.join(output_dir, f'{base}_{uuid.uuid4().hex[:8]}.pdf')
 
-            base = os.path.splitext(os.path.basename(file_path))[0]
-            dest = os.path.join(output_dir, f'{base}_{uuid.uuid4().hex[:8]}.pdf')
-            weasyprint.HTML(string=html).write_pdf(dest)
+                pdf = FPDF()
+                pdf.set_auto_page_break(auto=True, margin=15)
+                pdf.add_page()
+                pdf.set_font('Helvetica', size=11)
 
-            if os.path.isfile(dest) and os.path.getsize(dest) > 0:
-                return dest
-            step_errors.append('mammoth+weasyprint: output vuoto')
+                for line in text.split('\n'):
+                    try:
+                        pdf.multi_cell(0, 6, line if line.strip() else ' ')
+                    except Exception:
+                        safe = line.encode('latin-1', errors='replace').decode('latin-1')
+                        pdf.multi_cell(0, 6, safe if safe.strip() else ' ')
+
+                pdf.output(dest)
+                if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+                    return dest
+                step_errors.append('mammoth+fpdf2: output vuoto')
+            else:
+                step_errors.append('mammoth: documento senza testo estraibile')
         except Exception as e:
-            step_errors.append(f'mammoth+weasyprint: {e}')
+            step_errors.append(f'mammoth+fpdf2: {e}')
 
     # 3) LibreOffice
     if lo_path:
@@ -400,6 +459,9 @@ def _convert_pptx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
 # ── HTML ─────────────────────────────────────────────────────────────────────
 
 def _convert_html_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
+    step_errors = []
+
+    # 1) WeasyPrint (richiede GTK su Windows)
     try:
         import weasyprint
         base = os.path.splitext(os.path.basename(file_path))[0]
@@ -407,13 +469,74 @@ def _convert_html_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
         weasyprint.HTML(filename=file_path).write_pdf(dest)
         if os.path.isfile(dest) and os.path.getsize(dest) > 0:
             return dest
-    except Exception:
-        pass
+        step_errors.append('weasyprint: output vuoto')
+    except Exception as e:
+        step_errors.append(f'weasyprint: {e}')
 
+    # 2) Estrai testo via html.parser → fpdf2 (funziona senza GTK)
+    try:
+        from html.parser import HTMLParser
+        from fpdf import FPDF
+
+        class _TextExtractor(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.lines = []
+                self._current = []
+                self._skip = False
+            def handle_starttag(self, tag, attrs):
+                if tag in ('script', 'style'):
+                    self._skip = True
+                if tag in ('p', 'br', 'h1', 'h2', 'h3', 'li', 'div', 'tr'):
+                    if self._current:
+                        self.lines.append(''.join(self._current).strip())
+                        self._current = []
+            def handle_endtag(self, tag):
+                if tag in ('script', 'style'):
+                    self._skip = False
+            def handle_data(self, data):
+                if not self._skip:
+                    self._current.append(data)
+            def get_text(self):
+                if self._current:
+                    self.lines.append(''.join(self._current).strip())
+                return '\n'.join(l for l in self.lines if l)
+
+        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            html_src = f.read()
+
+        parser = _TextExtractor()
+        parser.feed(html_src)
+        text = parser.get_text()
+
+        if text.strip():
+            base = os.path.splitext(os.path.basename(file_path))[0]
+            dest = os.path.join(output_dir, f'{base}_{uuid.uuid4().hex[:8]}.pdf')
+            pdf = FPDF()
+            pdf.set_auto_page_break(auto=True, margin=15)
+            pdf.add_page()
+            pdf.set_font('Helvetica', size=10)
+            for line in text.split('\n'):
+                try:
+                    pdf.multi_cell(0, 6, line if line.strip() else ' ')
+                except Exception:
+                    safe = line.encode('latin-1', errors='replace').decode('latin-1')
+                    pdf.multi_cell(0, 6, safe if safe.strip() else ' ')
+            pdf.output(dest)
+            if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+                return dest
+        step_errors.append('html→fpdf2: testo vuoto o output mancante')
+    except Exception as e:
+        step_errors.append(f'html→fpdf2: {e}')
+
+    # 3) LibreOffice
     if lo_path:
         return _convert_office_to_pdf(file_path, output_dir, lo_path)
 
-    raise RuntimeError(f'Impossibile convertire HTML: {os.path.basename(file_path)}')
+    raise RuntimeError(
+        f'Impossibile convertire HTML {os.path.basename(file_path)}: '
+        + ' | '.join(step_errors)
+    )
 
 
 # ── TXT / XML ─────────────────────────────────────────────────────────────────
