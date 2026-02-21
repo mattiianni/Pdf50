@@ -8,6 +8,7 @@
 // ── Stato globale ─────────────────────────────────────────────────────────────
 const state = {
   sourcePath: null,
+  folderName: null,      // nome originale della cartella (usato per nominare il PDF)
   outputPath: null,
   jobId: null,
   eventSource: null,
@@ -291,8 +292,9 @@ async function handleDroppedFolder(dirEntry) {
 
     // 4. Successo → mostra info sorgente
     state.sourcePath = data.path;
+    state.folderName = data.folder_name || dirEntry.name;
     state.sourceIsTemp = true;
-    showSourceInfo(data.path, data.file_count, data.folder_name || dirEntry.name);
+    showSourceInfo(data.path, data.file_count, state.folderName);
     updateStartButton();
 
   } catch (err) {
@@ -376,6 +378,7 @@ async function selectSource() {
 
     if (data.path) {
       state.sourcePath = data.path;
+      state.folderName = data.path.split(/[/\\]/).filter(Boolean).pop() || null;
       state.sourceIsTemp = false;
       showSourceInfo(data.path, data.file_count);
       updateStartButton();
@@ -428,6 +431,7 @@ async function startJob() {
     output_path: state.outputPath,
     mode: mode,
     source_is_temp: state.sourceIsTemp,
+    folder_name: state.folderName || null,
   };
 
   let res;
@@ -851,6 +855,7 @@ function resetApp() {
 
   // Reset stato
   state.sourcePath = null;
+  state.folderName = null;
   state.outputPath = null;
   state.jobId = null;
   state.currentStep = 0;

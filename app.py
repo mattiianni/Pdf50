@@ -312,7 +312,9 @@ def _run_unified(job_id: str, source_path: str, output_path: str):
         _emit(job_id, {'type': 'step', 'step': 4, 'label': 'Unione PDF'})
         log(f'Unione di {len(ocr_pdfs)} PDF...')
 
-        folder_name = os.path.basename(source_path.rstrip('/\\'))
+        with jobs_lock:
+            folder_name = jobs[job_id].get('folder_name') or \
+                          os.path.basename(source_path.rstrip('/\\'))
         merged_path = os.path.join(tmp_dir, f'{folder_name}_merged.pdf')
 
         ok = pdf_merger.merge_pdfs(ocr_pdfs, merged_path)
@@ -388,7 +390,9 @@ def _run_per_folder(job_id: str, source_path: str, output_path: str):
         _emit(job_id, {'type': 'scan_done', 'total': total_files})
 
         # Raggruppa per prima sottocartella (livello 1)
-        root_folder_name = os.path.basename(source_path.rstrip('/\\'))
+        with jobs_lock:
+            root_folder_name = jobs[job_id].get('folder_name') or \
+                               os.path.basename(source_path.rstrip('/\\'))
         groups = defaultdict(list)
 
         for fi in files:
@@ -601,6 +605,9 @@ def start_job():
     output = data.get('output_path', '').strip()
     mode = data.get('mode', 'unified')   # 'unified' | 'per_folder'
     source_is_temp = bool(data.get('source_is_temp', False))
+    # Nome della cartella di origine (passato dal client; fallback al basename del path)
+    folder_name = (data.get('folder_name') or '').strip() or \
+                  os.path.basename(source.rstrip('/\\'))
 
     if not source or not os.path.isdir(source):
         return jsonify({'error': 'Cartella sorgente non valida'}), 400
@@ -619,6 +626,7 @@ def start_job():
             'source': source,
             'output': output,
             'mode': mode,
+            'folder_name': folder_name,
             'source_is_temp': source_is_temp,
             'created_at': time.time(),
         }
