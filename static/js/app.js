@@ -27,35 +27,103 @@ async function loadSystemInfo() {
   try {
     const res = await fetch('/api/system-info');
     const info = await res.json();
-    renderSysInfo(info);
+    renderDepsWarning(info);
   } catch (e) {
     // silenzioso
   }
 }
 
-function renderSysInfo(info) {
-  const container = document.getElementById('sysinfo');
-  const badges = [];
+function renderDepsWarning(info) {
+  const isMac = info.platform === 'darwin';
+  const missing = [];
 
-  if (info.libreoffice) {
-    badges.push({ text: 'LibreOffice ✓', cls: 'ok' });
-  } else {
-    badges.push({ text: 'LibreOffice mancante', cls: 'err' });
+  if (!info.libreoffice) {
+    missing.push({
+      name: 'LibreOffice',
+      desc: 'Converte DOCX, XLSX, PPT e tutti i formati Office in PDF',
+      url: 'https://www.libreoffice.org/download/',
+      urlLabel: 'Scarica LibreOffice',
+      brew: isMac ? 'brew install libreoffice' : null,
+    });
   }
 
-  if (info.ocrmypdf) {
-    if (info.tesseract_italian) {
-      badges.push({ text: 'OCR Italiano ✓', cls: 'ok' });
-    } else {
-      badges.push({ text: 'Tesseract-ITA mancante', cls: 'warn' });
-    }
-  } else {
-    badges.push({ text: 'ocrmypdf mancante', cls: 'err' });
+  if (!info.tesseract_italian) {
+    missing.push({
+      name: 'Tesseract + Lingua Italiana',
+      desc: 'Motore OCR per rendere i PDF ricercabili in italiano',
+      url: isMac
+        ? 'https://formulae.brew.sh/formula/tesseract-lang'
+        : 'https://github.com/UB-Mannheim/tesseract/wiki',
+      urlLabel: isMac ? 'Scarica (Homebrew)' : 'Scarica Tesseract',
+      brew: isMac ? 'brew install tesseract tesseract-lang' : null,
+      note: !isMac ? 'Durante l\'installazione spunta: Additional language data → Italian' : null,
+    });
   }
 
-  container.innerHTML = badges
-    .map(b => `<span class="sysinfo-badge ${b.cls}">${b.text}</span>`)
-    .join('');
+  if (!info.ghostscript) {
+    missing.push({
+      name: 'Ghostscript',
+      desc: 'Richiesto da ocrmypdf per ottimizzare i PDF dopo OCR',
+      url: isMac
+        ? 'https://formulae.brew.sh/formula/ghostscript'
+        : 'https://www.ghostscript.com/releases/',
+      urlLabel: 'Scarica Ghostscript',
+      brew: isMac ? 'brew install ghostscript' : null,
+    });
+  }
+
+  const banner = document.getElementById('deps-warning');
+  if (!banner) return;
+
+  // Se tutto OK: nasconde il banner e non mostra nulla
+  if (missing.length === 0) {
+    banner.classList.add('hidden');
+    return;
+  }
+
+  // Costruisce il banner con i link
+  banner.innerHTML = `
+    <div class="deps-warning-title">
+      Dipendenze mancanti — l'app non funzionerà correttamente senza di esse
+    </div>
+    <div class="deps-list">
+      ${missing.map(dep => `
+        <div class="dep-item">
+          <div class="dep-item-text">
+            <div class="dep-name">${dep.name}</div>
+            <div class="dep-desc">${dep.desc}${dep.note ? `<br><em>${dep.note}</em>` : ''}</div>
+          </div>
+          <div class="dep-actions">
+            ${dep.brew
+              ? `<span class="btn-brew" onclick="copyBrew('${dep.brew}')" title="Copia comando Homebrew">${dep.brew}</span>`
+              : ''}
+            <a class="btn-download" href="${dep.url}" target="_blank" rel="noopener">
+              ↓ ${dep.urlLabel}
+            </a>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="deps-warning-footer">
+      Dopo l'installazione, riavvia l'app per aggiornare questo avviso.
+    </div>
+  `;
+
+  banner.classList.remove('hidden');
+}
+
+function copyBrew(cmd) {
+  navigator.clipboard.writeText(cmd).then(() => {
+    // Feedback visivo temporaneo
+    const els = document.querySelectorAll('.btn-brew');
+    els.forEach(el => {
+      if (el.textContent.trim() === cmd) {
+        const orig = el.textContent;
+        el.textContent = '✓ Copiato!';
+        setTimeout(() => { el.textContent = orig; }, 1800);
+      }
+    });
+  }).catch(() => {});
 }
 
 // ── Drop Zone ─────────────────────────────────────────────────────────────────

@@ -629,12 +629,14 @@ def system_info():
     lo = converter.find_libreoffice()
     ocr_ok = ocr_processor.is_available()
     ita_ok = ocr_processor.has_italian_tessdata()
+    gs_ok = ocr_processor.has_ghostscript()
 
     info = {
         'libreoffice': lo is not None,
         'libreoffice_path': lo,
         'ocrmypdf': ocr_ok,
         'tesseract_italian': ita_ok,
+        'ghostscript': gs_ok,
         'platform': sys.platform,
     }
 
