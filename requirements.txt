@@ -1,0 +1,24 @@
+# Split PDF 50 - Dipendenze Python
+# Installazione: pip install -r requirements.txt
+
+# Web server
+flask>=3.0.0
+
+# PDF: unione, divisione, lettura
+pypdf>=4.0.0
+
+# OCR: converte PDF in PDF ricercabili (testo selezionabile)
+# Richiede Tesseract e Ghostscript installati nel sistema
+ocrmypdf>=16.0.0
+
+# Immagini → PDF (lossless, alta qualità)
+img2pdf>=0.5.0
+
+# Elaborazione immagini (fallback per img2pdf e formati speciali)
+Pillow>=10.0.0
+
+# File P7M (firme digitali CMS/PKCS#7)
+asn1crypto>=1.5.0
+
+# PDF da testo semplice (fallback senza LibreOffice)
+fpdf2>=2.7.0

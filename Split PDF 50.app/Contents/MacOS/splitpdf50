@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────
+# Split PDF 50 — Launcher macOS (.app bundle)
+# ─────────────────────────────────────────────────────────────
+
+# Percorso della cartella radice del progetto
+# (tre livelli su rispetto a Contents/MacOS/splitpdf50)
+APP_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$APP_DIR"
+
+# Assicurati che start.sh sia eseguibile
+chmod +x "$APP_DIR/start.sh"
+
+# Avvia il server (apre il browser automaticamente)
+bash "$APP_DIR/start.sh"

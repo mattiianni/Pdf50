@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Split PDF 50</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+  <!-- ── HEADER ──────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">⟁</span>
+        <span class="logo-text">Split PDF <span class="logo-accent">50</span></span>
+      </div>
+      <div id="sysinfo" class="sysinfo"></div>
+    </div>
+  </header>
+
+  <!-- ── MAIN ────────────────────────────────────────────────────── -->
+  <main class="app-main">
+
+    <!-- CARD SETUP (visibile inizialmente) -->
+    <section id="setup-card" class="card">
+
+      <!-- Drop zone -->
+      <div id="drop-zone" class="drop-zone" onclick="selectSource()">
+        <div class="drop-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7c0-1.1.9-2 2-2h3.17a2 2 0 0 1 1.42.59L11 7h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+            <line x1="12" y1="11" x2="12" y2="17"/>
+            <polyline points="9 14 12 11 15 14"/>
+          </svg>
+        </div>
+        <p class="drop-title">Trascina la cartella qui</p>
+        <p class="drop-sub">oppure clicca per sfogliare</p>
+        <div id="drop-hint" class="drop-hint hidden">
+          Rilascia per selezionare la cartella
+        </div>
+      </div>
+
+      <!-- Info cartella sorgente (visibile dopo selezione) -->
+      <div id="source-info" class="folder-info hidden">
+        <div class="folder-info-row">
+          <span class="folder-info-icon">📁</span>
+          <div class="folder-info-text">
+            <span id="source-path-display" class="folder-path"></span>
+            <span id="source-count" class="folder-count"></span>
+          </div>
+          <button class="btn-change" onclick="selectSource()">Cambia</button>
+        </div>
+      </div>
+
+      <!-- Separatore -->
+      <div class="divider"></div>
+
+      <!-- ── MODALITÀ OUTPUT ───────────────────────────────────── -->
+      <div class="option-group">
+        <label class="option-label">Il PDF di destinazione dovrà essere:</label>
+        <div class="mode-selector">
+          <label class="mode-option" id="mode-unified-label">
+            <input type="radio" name="mode" value="unified" id="mode-unified" checked />
+            <div class="mode-card">
+              <div class="mode-card-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="1.5"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="8" y1="13" x2="16" y2="13"/>
+                  <line x1="8" y1="17" x2="16" y2="17"/>
+                  <polyline points="10 9 9 9 8 9"/>
+                </svg>
+              </div>
+              <div class="mode-card-text">
+                <strong>Unico</strong>
+                <span>Tutte le sottocartelle in un solo PDF</span>
+              </div>
+            </div>
+          </label>
+
+          <label class="mode-option" id="mode-perfolder-label">
+            <input type="radio" name="mode" value="per_folder" id="mode-perfolder" />
+            <div class="mode-card">
+              <div class="mode-card-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="1.5"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 7c0-1.1.9-2 2-2h3.17a2 2 0 0 1 1.42.59L11 7h2"/>
+                  <path d="M3 7v10a2 2 0 0 0 2 2h5"/>
+                  <path d="M13 12h8a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z"/>
+                  <line x1="15" y1="16" x2="19" y2="16"/>
+                </svg>
+              </div>
+              <div class="mode-card-text">
+                <strong>Suddiviso</strong>
+                <span>Un PDF per ogni sottocartella</span>
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Cartella destinazione -->
+      <div class="option-group">
+        <label class="option-label">Cartella di destinazione</label>
+        <div class="folder-picker-row">
+          <span id="output-path-display" class="folder-path-display">Nessuna cartella selezionata</span>
+          <button class="btn-outline" onclick="selectOutput()">Sfoglia</button>
+        </div>
+      </div>
+
+      <!-- Pulsante avvio -->
+      <button id="btn-start" class="btn-primary btn-start" disabled onclick="startJob()">
+        Avvia Conversione
+      </button>
+
+    </section>
+
+    <!-- ── CARD PROGRESSO (visibile durante elaborazione) ──── -->
+    <section id="progress-card" class="card hidden">
+
+      <div class="progress-header">
+        <div class="progress-title-row">
+          <h2 id="progress-step-label" class="progress-step-label">Elaborazione in corso...</h2>
+          <button id="btn-cancel" class="btn-cancel" onclick="cancelJob()">Annulla</button>
+        </div>
+
+        <!-- Indicatori step -->
+        <div class="steps-indicator">
+          <div class="step-item" id="step-1">
+            <div class="step-dot"></div>
+            <span>Scansione</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-item" id="step-2">
+            <div class="step-dot"></div>
+            <span>Conversione</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-item" id="step-3">
+            <div class="step-dot"></div>
+            <span>OCR</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-item" id="step-4">
+            <div class="step-dot"></div>
+            <span>Unione</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-item" id="step-5">
+            <div class="step-dot"></div>
+            <span>Salvataggio</span>
+          </div>
+        </div>
+
+        <!-- Barra progresso -->
+        <div class="progress-bar-wrap">
+          <div id="progress-bar" class="progress-bar"></div>
+        </div>
+        <div class="progress-meta">
+          <span id="progress-current-file" class="progress-file"></span>
+          <span id="progress-count" class="progress-count"></span>
+        </div>
+      </div>
+
+      <!-- Log live -->
+      <div class="log-container">
+        <div class="log-header">
+          <span>Log operazioni</span>
+          <button class="btn-log-clear" onclick="clearLog()">Pulisci</button>
+        </div>
+        <div id="log-panel" class="log-panel"></div>
+      </div>
+
+    </section>
+
+    <!-- ── CARD RISULTATO ───────────────────────────────────────── -->
+    <section id="result-card" class="card hidden">
+      <div id="result-content"></div>
+      <button class="btn-primary" onclick="resetApp()" style="margin-top:24px">
+        Nuova elaborazione
+      </button>
+    </section>
+
+  </main>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
