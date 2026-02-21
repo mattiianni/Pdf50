@@ -115,15 +115,58 @@ def _find_ghostscript() -> str:
 def apply_ocr(input_pdf: str, output_pdf: str, language: str = 'ita') -> bool:
     """
     Applica OCR al PDF specificato e salva il risultato.
-
-    Args:
-        input_pdf:  percorso PDF sorgente
-        output_pdf: percorso PDF destinazione (con testo OCR)
-        language:   codice lingua Tesseract (default: 'ita' = italiano)
+    - Se Tesseract non è installato: copia il file senza OCR e solleva RuntimeError.
+    - Se Ghostscript manca: usa optimize=0 (nessuna ottimizzazione PDF, ma OCR funziona).
+    - Se ocrmypdf fallisce per altri motivi: copia il file e solleva RuntimeError.
 
     Returns:
-        True se l'OCR è andato a buon fine, False altrimenti.
+        True se l'OCR è andato a buon fine.
+    Raises:
+        RuntimeError con messaggio leggibile in caso di fallimento.
     """
+    # Controlla Tesseract prima di tutto
+    tesseract_cmd = _find_tesseract()
+    if not tesseract_cmd:
+        shutil.copy2(input_pdf, output_pdf)
+        raise RuntimeError(
+            'Tesseract non trovato — installa Tesseract con il pacchetto lingua italiana. '
+            'Il PDF è stato incluso senza testo ricercabile.'
+        )
+
+    # Controlla la lingua italiana
+    try:
+        result = subprocess.run(
+            [tesseract_cmd, '--list-langs'],
+            capture_output=True, text=True, timeout=10
+        )
+        langs = (result.stdout + result.stderr).split()
+        if 'ita' not in langs:
+            shutil.copy2(input_pdf, output_pdf)
+            raise RuntimeError(
+                'Pacchetto lingua italiana (ita) non installato in Tesseract. '
+                'Installa tesseract-lang o il data pack italiano.'
+            )
+    except RuntimeError:
+        raise
+    except Exception as e:
+        shutil.copy2(input_pdf, output_pdf)
+        raise RuntimeError(f'Impossibile verificare le lingue Tesseract: {e}')
+
+    # Ghostscript opzionale: se manca usa optimize=0
+    has_gs = _find_ghostscript() is not None
+    optimize = 1 if has_gs else 0
+
+    # Aggiungi Tesseract al PATH del processo se non è già trovabile da ocrmypdf
+    env_patch = {}
+    if sys.platform == 'win32':
+        tess_dir = os.path.dirname(tesseract_cmd)
+        current_path = os.environ.get('PATH', '')
+        if tess_dir.lower() not in current_path.lower():
+            env_patch['PATH'] = tess_dir + os.pathsep + current_path
+
+    if env_patch:
+        os.environ.update(env_patch)
+
     try:
         import ocrmypdf
 
@@ -132,20 +175,18 @@ def apply_ocr(input_pdf: str, output_pdf: str, language: str = 'ita') -> bool:
             output_pdf,
             language=language,
             force_ocr=True,
-            optimize=1,
+            optimize=optimize,
             progress_bar=False,
-            skip_big=True,
-            oversample=0,
+            # skip_big=False: non saltare immagini grandi (default ocrmypdf)
+            # oversample non impostato: ocrmypdf sceglie la risoluzione ottimale
         )
 
         if os.path.isfile(output_pdf) and os.path.getsize(output_pdf) > 0:
             return True
 
+        shutil.copy2(input_pdf, output_pdf)
         return False
 
     except Exception as e:
-        try:
-            shutil.copy2(input_pdf, output_pdf)
-        except Exception:
-            pass
-        raise RuntimeError(f'OCR fallito: {e}')
+        shutil.copy2(input_pdf, output_pdf)
+        raise RuntimeError(f'ocrmypdf: {e}')
