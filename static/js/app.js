@@ -669,6 +669,52 @@ function showResult(event) {
   } else {
     container.innerHTML = renderPerFolderResult(event);
   }
+
+  attachLogToResult();
+}
+
+// Clona il log panel nella result card con badge di avviso se ci sono errori
+function attachLogToResult() {
+  const logPanel = document.getElementById('log-panel');
+  const section  = document.getElementById('result-log-section');
+  if (!section || !logPanel) return;
+
+  const errorCount = logPanel.querySelectorAll('.log-entry.error').length;
+  const warnCount  = logPanel.querySelectorAll('.log-entry.warning').length;
+  const issueCount = errorCount + warnCount;
+  const totalCount = logPanel.querySelectorAll('.log-entry').length;
+
+  if (totalCount === 0) return;
+
+  // Clone del log (l'originale rimane nel progress-card per il reset)
+  const logClone = logPanel.cloneNode(true);
+  logClone.removeAttribute('id');
+  logClone.classList.add('hidden', 'result-log-panel');
+
+  let badgeClass   = 'result-log-badge';
+  let badgeContent;
+
+  if (issueCount > 0) {
+    badgeClass  += ' result-log-badge--warn';
+    const label  = issueCount === 1 ? 'segnalazione' : 'segnalazioni';
+    badgeContent = `<span>⚠ ${issueCount} ${label} durante l'elaborazione</span>
+                    <button class="btn-log-show">Mostra log</button>`;
+  } else {
+    badgeContent = `<span>Elaborazione completata senza avvisi</span>
+                    <button class="btn-log-show">Mostra log</button>`;
+  }
+
+  section.innerHTML = `<div class="${badgeClass}">${badgeContent}</div>`;
+  section.appendChild(logClone);
+
+  const badge = section.querySelector('.result-log-badge');
+  section.querySelector('.btn-log-show').addEventListener('click', () => {
+    const hidden = logClone.classList.toggle('hidden');
+    section.querySelector('.btn-log-show').textContent =
+      hidden ? 'Mostra log' : 'Nascondi log';
+    badge.style.borderRadius = hidden ? '8px' : '8px 8px 0 0';
+    if (!hidden) logClone.scrollTop = logClone.scrollHeight;
+  });
 }
 
 function renderUnifiedResult(event) {
@@ -876,6 +922,7 @@ function resetApp() {
   document.getElementById('progress-count').textContent = '';
   document.getElementById('progress-step-label').textContent = 'Elaborazione in corso...';
   document.getElementById('log-panel').innerHTML = '';
+  document.getElementById('result-log-section').innerHTML = '';
   document.getElementById('btn-cancel').style.display = '';
 
   // Reset step indicators

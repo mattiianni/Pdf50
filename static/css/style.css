@@ -903,6 +903,55 @@ body {
   gap: 2px;
 }
 
+/* ── RESULT LOG SECTION ───────────────────────────────────── */
+
+#result-log-section {
+  margin-top: 16px;
+}
+
+.result-log-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.result-log-badge--warn {
+  background: #FFF8EC;
+  border-color: #F0C070;
+  color: #7A4A00;
+  font-weight: 500;
+}
+
+.btn-log-show {
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.btn-log-show:hover {
+  opacity: 1;
+}
+
+.result-log-panel {
+  height: 220px;
+  margin-top: 0;
+  border-radius: 0 0 8px 8px;
+  border-top: none;
+}
+
 /* ── RESPONSIVE ───────────────────────────────────────────── */
 
 @media (max-width: 600px) {
