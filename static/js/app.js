@@ -133,9 +133,12 @@ function renderDepsWarning(info) {
   }
 
   function renderGroup(dep, isRequired) {
-    const hasMultipleItems = dep.items && dep.items.length > 1;
+    const dismissBtn = !isRequired
+      ? `<button class="dep-dismiss" onclick="this.closest('.dep-item').remove(); _checkOptionalSectionEmpty();" title="Chiudi">×</button>`
+      : '';
     return `
       <div class="dep-item${isRequired ? '' : ' dep-item-optional'}">
+        ${dismissBtn}
         <div class="dep-item-text">
           <div class="dep-name">${isRequired ? '' : '<span class="dep-badge-opt">opzionale</span> '}${dep.name}</div>
           <div class="dep-desc">${dep.desc}</div>
@@ -169,6 +172,16 @@ function renderDepsWarning(info) {
   `;
 
   banner.classList.remove('hidden');
+}
+
+function _checkOptionalSectionEmpty() {
+  // Se non rimangono item opzionali, nasconde l'intero banner (se non ci sono nemmeno required)
+  const banner = document.getElementById('deps-warning');
+  if (!banner) return;
+  const remaining = banner.querySelectorAll('.dep-item');
+  if (remaining.length === 0) {
+    banner.classList.add('hidden');
+  }
 }
 
 function copyBrew(cmd) {

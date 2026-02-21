@@ -205,6 +205,32 @@ body {
 .dep-item-optional {
   opacity: .85;
   border-color: #E8DCC0;
+  position: relative;
+}
+
+.dep-dismiss {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  color: #B0956A;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background .12s, color .12s;
+}
+
+.dep-dismiss:hover {
+  background: #F0D08A;
+  color: #5A3A00;
 }
 
 .dep-badge-opt {
