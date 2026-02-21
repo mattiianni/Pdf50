@@ -134,29 +134,54 @@ def _convert_office_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str
 
 # ── Helper: docx2pdf (Office COM / AppleScript) ───────────────────────────────
 
-def _try_docx2pdf(file_path: str, output_dir: str) -> str:
-    """Converti tramite Microsoft Office installato (massima qualita')."""
+def _try_docx2pdf(file_path: str, output_dir: str) -> tuple:
+    """
+    Prova a convertire tramite Microsoft Office (COM).
+    Ritorna (percorso_pdf, None) oppure (None, str_errore).
+    Copia il file in una posizione trusted prima di convertire per
+    evitare la Protected View di Word sui file da cartelle temp.
+    """
+    import glob as _glob
+
+    # Copia in una cartella non-temp per evitare la Protected View di Word
+    tmp_trusted = tempfile.mkdtemp(prefix='docx2pdf_')
     try:
+        trusted_copy = os.path.join(tmp_trusted, os.path.basename(file_path))
+        shutil.copy2(file_path, trusted_copy)
+
+        # Su Windows rimuovi il flag "file scaricato da internet" (Zone.Identifier)
+        if sys.platform == 'win32':
+            zone_id = trusted_copy + ':Zone.Identifier'
+            try:
+                if os.path.exists(zone_id):
+                    os.remove(zone_id)
+            except Exception:
+                pass
+
         from docx2pdf import convert as _convert
         base = os.path.splitext(os.path.basename(file_path))[0]
         dest = os.path.join(output_dir, f'{base}_{uuid.uuid4().hex[:8]}.pdf')
-        _convert(file_path, dest)
+        _convert(trusted_copy, dest)
         if os.path.isfile(dest) and os.path.getsize(dest) > 0:
-            return dest
-    except Exception:
-        pass
-    return None
+            return dest, None
+        return None, 'output PDF vuoto o assente dopo la conversione'
+    except Exception as e:
+        return None, str(e)
+    finally:
+        shutil.rmtree(tmp_trusted, ignore_errors=True)
 
 
 # ── DOCX / DOC / RTF ─────────────────────────────────────────────────────────
 
 def _convert_docx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
     ext = os.path.splitext(file_path)[1].lower()
+    step_errors = []
 
     # 1) Office COM (Word/Mac Word)
-    result = _try_docx2pdf(file_path, output_dir)
+    result, err = _try_docx2pdf(file_path, output_dir)
     if result:
         return result
+    step_errors.append(f'Office COM: {err or "?"}')
 
     # 2) mammoth -> HTML -> weasyprint
     if ext in ('.docx', '.doc', '.rtf'):
@@ -186,16 +211,17 @@ def _convert_docx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
 
             if os.path.isfile(dest) and os.path.getsize(dest) > 0:
                 return dest
-        except Exception:
-            pass
+            step_errors.append('mammoth+weasyprint: output vuoto')
+        except Exception as e:
+            step_errors.append(f'mammoth+weasyprint: {e}')
 
     # 3) LibreOffice
     if lo_path:
         return _convert_office_to_pdf(file_path, output_dir, lo_path)
 
     raise RuntimeError(
-        f'Impossibile convertire {os.path.basename(file_path)}. '
-        'Installa Microsoft Office oppure LibreOffice.'
+        f'Impossibile convertire {os.path.basename(file_path)}: '
+        + ' | '.join(step_errors)
     )
 
 
@@ -203,11 +229,13 @@ def _convert_docx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
 
 def _convert_xlsx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
     ext = os.path.splitext(file_path)[1].lower()
+    step_errors = []
 
     # 1) Office COM (Excel, solo Windows/macOS con Office)
-    result = _try_docx2pdf(file_path, output_dir)
+    result, err = _try_docx2pdf(file_path, output_dir)
     if result:
         return result
+    step_errors.append(f'Office COM: {err or "?"}')
 
     # 2) openpyxl + fpdf2 (tabelle formattate, Python puro)
     if ext in ('.xlsx', '.xls', '.csv', '.ods'):
@@ -298,8 +326,8 @@ def _convert_xlsx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
         return _convert_office_to_pdf(file_path, output_dir, lo_path)
 
     raise RuntimeError(
-        f'Impossibile convertire {os.path.basename(file_path)}. '
-        'Installa Microsoft Office oppure LibreOffice.'
+        f'Impossibile convertire {os.path.basename(file_path)}: '
+        + ' | '.join(step_errors)
     )
 
 
@@ -307,11 +335,13 @@ def _convert_xlsx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
 
 def _convert_pptx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
     ext = os.path.splitext(file_path)[1].lower()
+    step_errors = []
 
     # 1) Office COM
-    result = _try_docx2pdf(file_path, output_dir)
+    result, err = _try_docx2pdf(file_path, output_dir)
     if result:
         return result
+    step_errors.append(f'Office COM: {err or "?"}')
 
     # 2) python-pptx -> testo per slide -> fpdf2
     if ext in ('.pptx', '.ppt'):
@@ -362,8 +392,8 @@ def _convert_pptx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
         return _convert_office_to_pdf(file_path, output_dir, lo_path)
 
     raise RuntimeError(
-        f'Impossibile convertire {os.path.basename(file_path)}. '
-        'Installa Microsoft Office oppure LibreOffice.'
+        f'Impossibile convertire {os.path.basename(file_path)}: '
+        + ' | '.join(step_errors)
     )
 
 
