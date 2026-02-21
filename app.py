@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from core import file_scanner, converter, ocr_processor, pdf_merger, pdf_splitter
 
 app = Flask(__name__, static_folder='static')
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024   # 500 MB max upload
 
 # Storage in-memory dei job
 jobs = {}
@@ -348,6 +349,8 @@ def _run_unified(job_id: str, source_path: str, output_path: str):
         with jobs_lock:
             if job_id in jobs:
                 jobs[job_id]['status'] = 'done'
+                if jobs[job_id].get('source_is_temp', False):
+                    shutil.rmtree(source_path, ignore_errors=True)
         _emit(job_id, {'type': 'eos'})
 
 
@@ -489,6 +492,8 @@ def _run_per_folder(job_id: str, source_path: str, output_path: str):
         with jobs_lock:
             if job_id in jobs:
                 jobs[job_id]['status'] = 'done'
+                if jobs[job_id].get('source_is_temp', False):
+                    shutil.rmtree(source_path, ignore_errors=True)
         _emit(job_id, {'type': 'eos'})
 
 
@@ -527,6 +532,65 @@ def dialog_output():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Route: upload cartella drag-and-drop
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/upload-folder', methods=['POST'])
+def upload_folder():
+    """
+    Riceve i file di una cartella trascinata dal browser.
+    Il client invia i file come multipart con il percorso relativo come filename.
+    Salva tutto in una cartella temporanea e restituisce il percorso.
+    """
+    folder_name = request.form.get('folder_name', 'Cartella')
+    files = request.files.getlist('files')
+
+    if not files:
+        return jsonify({'error': 'Nessun file ricevuto'}), 400
+
+    tmp_dir = tempfile.mkdtemp(prefix='splitpdf50_up_')
+
+    try:
+        for f in files:
+            rel_path = f.filename.replace('\\', '/')
+            # Sicurezza: rimuovi eventuali path traversal
+            safe_parts = [p for p in rel_path.split('/') if p and p != '..']
+            if not safe_parts:
+                continue
+            dest = os.path.join(tmp_dir, *safe_parts)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            f.save(dest)
+
+        files_found = file_scanner.scan(tmp_dir)
+        return jsonify({
+            'path': tmp_dir,
+            'folder_name': folder_name,
+            'file_count': len(files_found),
+        })
+
+    except Exception as e:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/cleanup-temp', methods=['POST'])
+def cleanup_temp():
+    """Elimina una cartella temporanea di upload non più necessaria."""
+    data = request.get_json() or {}
+    path = data.get('path', '').strip()
+    tmp_base = tempfile.gettempdir()
+    # Sicurezza: elimina solo percorsi dentro la cartella temp di sistema
+    if path and os.path.isabs(path):
+        try:
+            common = os.path.commonpath([os.path.abspath(path), tmp_base])
+            if common == tmp_base:
+                shutil.rmtree(path, ignore_errors=True)
+        except Exception:
+            pass
+    return jsonify({'ok': True})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Route: avvio job
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -536,6 +600,7 @@ def start_job():
     source = data.get('source_path', '').strip()
     output = data.get('output_path', '').strip()
     mode = data.get('mode', 'unified')   # 'unified' | 'per_folder'
+    source_is_temp = bool(data.get('source_is_temp', False))
 
     if not source or not os.path.isdir(source):
         return jsonify({'error': 'Cartella sorgente non valida'}), 400
@@ -554,6 +619,7 @@ def start_job():
             'source': source,
             'output': output,
             'mode': mode,
+            'source_is_temp': source_is_temp,
             'created_at': time.time(),
         }
 

@@ -32,7 +32,7 @@
     <section id="setup-card" class="card">
 
       <!-- Drop zone -->
-      <div id="drop-zone" class="drop-zone" onclick="selectSource()">
+      <div id="drop-zone" class="drop-zone" onclick="handleDropZoneClick()">
         <div class="drop-icon">
           <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"
                fill="none" stroke="currentColor" stroke-width="1.5"
@@ -42,8 +42,9 @@
             <polyline points="9 14 12 11 15 14"/>
           </svg>
         </div>
-        <p class="drop-title">Trascina la cartella qui</p>
-        <p class="drop-sub">oppure clicca per sfogliare</p>
+        <p id="drop-title" class="drop-title">Trascina la cartella qui</p>
+        <p id="drop-sub" class="drop-sub">oppure clicca per sfogliare</p>
+        <p id="drop-status" class="drop-sub hidden" style="color:#4A7C6B;font-weight:500"></p>
         <div id="drop-hint" class="drop-hint hidden">
           Rilascia per selezionare la cartella
         </div>

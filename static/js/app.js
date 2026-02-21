@@ -13,6 +13,8 @@ const state = {
   eventSource: null,
   currentStep: 0,
   totalFiles: 0,
+  sourceIsTemp: false,   // true se la sorgente è una cartella uploadata via drag-drop
+  uploading: false,      // true durante l'upload di una cartella trascinata
 };
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -199,6 +201,12 @@ function copyBrew(cmd) {
 }
 
 // ── Drop Zone ─────────────────────────────────────────────────────────────────
+
+function handleDropZoneClick() {
+  if (state.uploading) return;
+  selectSource();
+}
+
 function initDropZone() {
   const zone = document.getElementById('drop-zone');
 
@@ -225,21 +233,150 @@ function initDropZone() {
     zone.classList.remove('drag-over');
     document.getElementById('drop-hint').classList.add('hidden');
 
-    // Quando l'utente trascina una cartella, apriamo il dialog nativo
-    // Il browser non espone il percorso assoluto per sicurezza,
-    // quindi usiamo il drag come trigger per aprire il dialog nativo.
-    await selectSource();
+    if (state.uploading) return;
+
+    const items = Array.from(e.dataTransfer.items || []);
+    if (items.length === 0) return;
+
+    const firstItem = items[0];
+    const entry = firstItem.webkitGetAsEntry ? firstItem.webkitGetAsEntry() : null;
+
+    if (!entry || !entry.isDirectory) {
+      // Nessuna cartella rilevata → apri il dialog nativo come fallback
+      await selectSource();
+      return;
+    }
+
+    await handleDroppedFolder(entry);
   });
+}
+
+// ── Gestione cartella trascinata ───────────────────────────────────────────────
+
+async function handleDroppedFolder(dirEntry) {
+  state.uploading = true;
+  setDropZoneStatus(`Raccogliendo file da "${dirEntry.name}"...`);
+
+  try {
+    // 1. Traversa l'albero directory e raccoglie tutti i file
+    const fileEntries = [];
+    await traverseDir(dirEntry, fileEntries, '');
+
+    if (fileEntries.length === 0) {
+      setDropZoneStatus('Nessun file trovato nella cartella.');
+      setTimeout(resetDropZoneStatus, 2500);
+      return;
+    }
+
+    // 2. Converti FileSystemFileEntry → File (con progresso)
+    const formData = new FormData();
+    formData.append('folder_name', dirEntry.name);
+
+    for (let i = 0; i < fileEntries.length; i++) {
+      setDropZoneStatus(`Preparazione ${i + 1} / ${fileEntries.length} file...`);
+      const { fileEntry, relPath } = fileEntries[i];
+      const file = await getFileFromEntry(fileEntry);
+      formData.append('files', file, relPath);
+    }
+
+    // 3. Invia al server
+    setDropZoneStatus(`Invio al server (${fileEntries.length} file)...`);
+    const res = await fetch('/api/upload-folder', { method: 'POST', body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    // 4. Successo → mostra info sorgente
+    state.sourcePath = data.path;
+    state.sourceIsTemp = true;
+    showSourceInfo(data.path, data.file_count, data.folder_name || dirEntry.name);
+    updateStartButton();
+
+  } catch (err) {
+    setDropZoneStatus(`Errore: ${err.message}`);
+    setTimeout(resetDropZoneStatus, 3000);
+  } finally {
+    state.uploading = false;
+  }
+}
+
+// Attraversa ricorsivamente una FileSystemDirectoryEntry
+async function traverseDir(dirEntry, result, basePath) {
+  const reader = dirEntry.createReader();
+  const entries = await readAllEntries(reader);
+  for (const entry of entries) {
+    const relPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+    if (entry.isFile) {
+      result.push({ fileEntry: entry, relPath });
+    } else if (entry.isDirectory) {
+      await traverseDir(entry, result, relPath);
+    }
+  }
+}
+
+// Legge TUTTI gli entry da un DirectoryReader (gestisce il limite di 100)
+function readAllEntries(reader) {
+  return new Promise((resolve, reject) => {
+    const all = [];
+    function readBatch() {
+      reader.readEntries((entries) => {
+        if (entries.length === 0) {
+          resolve(all);
+        } else {
+          all.push(...entries);
+          readBatch();
+        }
+      }, reject);
+    }
+    readBatch();
+  });
+}
+
+// Converte un FileSystemFileEntry in un oggetto File
+function getFileFromEntry(fileEntry) {
+  return new Promise((resolve, reject) => fileEntry.file(resolve, reject));
+}
+
+// Mostra un messaggio di stato nella drop zone (nasconde il testo normale)
+function setDropZoneStatus(msg) {
+  document.getElementById('drop-title').classList.add('hidden');
+  document.getElementById('drop-sub').classList.add('hidden');
+  const el = document.getElementById('drop-status');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+// Ripristina l'aspetto normale della drop zone
+function resetDropZoneStatus() {
+  document.getElementById('drop-title').classList.remove('hidden');
+  document.getElementById('drop-sub').classList.remove('hidden');
+  const el = document.getElementById('drop-status');
+  el.textContent = '';
+  el.classList.add('hidden');
 }
 
 // ── Selezione cartelle ────────────────────────────────────────────────────────
 async function selectSource() {
+  // Se si stava usando una cartella uploadata, puliscila sul server
+  if (state.sourceIsTemp && state.sourcePath) {
+    fetch('/api/cleanup-temp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: state.sourcePath }),
+    }).catch(() => {});
+    state.sourceIsTemp = false;
+  }
+
   try {
     const res = await fetch('/api/dialog/source', { method: 'POST' });
     const data = await res.json();
 
     if (data.path) {
       state.sourcePath = data.path;
+      state.sourceIsTemp = false;
       showSourceInfo(data.path, data.file_count);
       updateStartButton();
     }
@@ -265,14 +402,14 @@ async function selectOutput() {
   }
 }
 
-function showSourceInfo(path, fileCount) {
+function showSourceInfo(path, fileCount, displayName) {
   const dropZone = document.getElementById('drop-zone');
   const sourceInfo = document.getElementById('source-info');
 
   dropZone.classList.add('hidden');
   sourceInfo.classList.remove('hidden');
 
-  document.getElementById('source-path-display').textContent = path;
+  document.getElementById('source-path-display').textContent = displayName || path;
   document.getElementById('source-count').textContent =
     `${fileCount} file supportati trovati`;
 }
@@ -290,6 +427,7 @@ async function startJob() {
     source_path: state.sourcePath,
     output_path: state.outputPath,
     mode: mode,
+    source_is_temp: state.sourceIsTemp,
   };
 
   let res;
@@ -701,13 +839,27 @@ function resetApp() {
     state.eventSource = null;
   }
 
+  // Se la sorgente era una cartella uploadata e non è stato avviato alcun job
+  // (il job la pulisce da solo nel suo finally), puliscila ora
+  if (state.sourceIsTemp && state.sourcePath && !state.jobId) {
+    fetch('/api/cleanup-temp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: state.sourcePath }),
+    }).catch(() => {});
+  }
+
   // Reset stato
   state.sourcePath = null;
   state.outputPath = null;
   state.jobId = null;
   state.currentStep = 0;
   state.totalFiles = 0;
+  state.sourceIsTemp = false;
+  state.uploading = false;
   _lastCursor = 0;
+
+  resetDropZoneStatus();
 
   // Reset UI
   document.getElementById('drop-zone').classList.remove('hidden');
