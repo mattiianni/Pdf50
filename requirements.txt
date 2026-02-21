@@ -7,18 +7,36 @@ flask>=3.0.0
 # PDF: unione, divisione, lettura
 pypdf>=4.0.0
 
-# OCR: converte PDF in PDF ricercabili (testo selezionabile)
-# Richiede Tesseract e Ghostscript installati nel sistema
+# OCR: converte PDF in PDF ricercabili
+# Richiede Tesseract (con pack ITA) e Ghostscript nel sistema
 ocrmypdf>=16.0.0
 
-# Immagini → PDF (lossless, alta qualità)
+# Immagini -> PDF (lossless)
 img2pdf>=0.5.0
 
-# Elaborazione immagini (fallback per img2pdf e formati speciali)
+# Elaborazione immagini
 Pillow>=10.0.0
 
 # File P7M (firme digitali CMS/PKCS#7)
 asn1crypto>=1.5.0
 
-# PDF da testo semplice (fallback senza LibreOffice)
+# PDF da testo/tabelle semplici
 fpdf2>=2.7.0
+
+# DOCX/XLSX/PPTX -> PDF tramite Microsoft Office installato (se presente)
+# Su Windows usa la COM automation di Word/Excel/PowerPoint
+# Su macOS usa AppleScript per controllare Office for Mac
+docx2pdf>=0.1.8
+
+# DOCX -> HTML (conversione senza LibreOffice ne' Office)
+mammoth>=1.7.0
+
+# HTML/CSS -> PDF (usato come output di mammoth, e per file HTML)
+# Su Windows funziona con solo pip. Su macOS richiede: brew install pango
+weasyprint>=60.0
+
+# Lettura fogli Excel (XLSX/XLS) per rendering tabelle in PDF
+openpyxl>=3.1.0
+
+# Lettura presentazioni PowerPoint (PPTX) per estrazione testo slide
+python-pptx>=0.6.21

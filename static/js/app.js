@@ -35,75 +35,134 @@ async function loadSystemInfo() {
 
 function renderDepsWarning(info) {
   const isMac = info.platform === 'darwin';
-  const missing = [];
+  const required = [];   // blocca il funzionamento
+  const optional = [];   // migliora la qualità
 
-  if (!info.libreoffice) {
-    missing.push({
-      name: 'LibreOffice',
-      desc: 'Converte DOCX, XLSX, PPT e tutti i formati Office in PDF',
+  // ── CONVERSIONE OFFICE (DOCX / XLSX / PPTX) ──────────────────────────────
+  // OK se: Microsoft Office installato OPPURE LibreOffice installato
+  // (docx2pdf usa Office COM, LibreOffice è il fallback)
+  if (!info.can_convert_office) {
+    required.push({
+      name: 'Conversione documenti Office',
+      desc: 'Serve Microsoft Office (già installato) oppure LibreOffice per convertire DOCX, XLSX, PPTX in PDF.',
+      items: [
+        {
+          label: 'Microsoft Office',
+          url: 'https://www.microsoft.com/it-it/microsoft-365',
+          urlLabel: 'Info Microsoft 365',
+          brew: null,
+        },
+        {
+          label: 'oppure LibreOffice (gratuito)',
+          url: 'https://www.libreoffice.org/download/',
+          urlLabel: 'Scarica LibreOffice',
+          brew: isMac ? 'brew install libreoffice' : null,
+        },
+      ],
+    });
+  } else if (!info.libreoffice && info.ms_office) {
+    // Office trovato, LibreOffice no → tutto OK per formati Office standard
+    // Ma ODT/ODS/ODP nativi di LibreOffice avranno qualità ridotta
+    optional.push({
+      name: 'LibreOffice (opzionale)',
+      desc: 'Senza LibreOffice, i file ODT/ODS/ODP potrebbero non essere convertiti correttamente. Per DOCX/XLSX/PPTX Microsoft Office è già sufficiente.',
       url: 'https://www.libreoffice.org/download/',
       urlLabel: 'Scarica LibreOffice',
       brew: isMac ? 'brew install libreoffice' : null,
     });
   }
 
+  // ── OCR ITALIANO ──────────────────────────────────────────────────────────
   if (!info.tesseract_italian) {
-    missing.push({
+    required.push({
       name: 'Tesseract + Lingua Italiana',
-      desc: 'Motore OCR per rendere i PDF ricercabili in italiano',
-      url: isMac
-        ? 'https://formulae.brew.sh/formula/tesseract-lang'
-        : 'https://github.com/UB-Mannheim/tesseract/wiki',
-      urlLabel: isMac ? 'Scarica (Homebrew)' : 'Scarica Tesseract',
-      brew: isMac ? 'brew install tesseract tesseract-lang' : null,
-      note: !isMac ? 'Durante l\'installazione spunta: Additional language data → Italian' : null,
+      desc: 'Necessario per applicare l\'OCR e rendere i PDF ricercabili in italiano.',
+      items: [
+        {
+          label: isMac ? 'Installa via Homebrew' : 'Scarica Tesseract',
+          url: isMac
+            ? 'https://formulae.brew.sh/formula/tesseract-lang'
+            : 'https://github.com/UB-Mannheim/tesseract/wiki',
+          urlLabel: isMac ? 'Homebrew' : 'Scarica',
+          brew: isMac ? 'brew install tesseract tesseract-lang' : null,
+          note: !isMac ? 'Durante l\'installazione spunta: Additional language data → Italian' : null,
+        },
+      ],
     });
   }
 
+  // ── GHOSTSCRIPT ───────────────────────────────────────────────────────────
   if (!info.ghostscript) {
-    missing.push({
+    required.push({
       name: 'Ghostscript',
-      desc: 'Richiesto da ocrmypdf per ottimizzare i PDF dopo OCR',
-      url: isMac
-        ? 'https://formulae.brew.sh/formula/ghostscript'
-        : 'https://www.ghostscript.com/releases/',
-      urlLabel: 'Scarica Ghostscript',
-      brew: isMac ? 'brew install ghostscript' : null,
+      desc: 'Richiesto da ocrmypdf per ottimizzare i PDF dopo l\'OCR.',
+      items: [
+        {
+          label: 'Scarica Ghostscript',
+          url: isMac
+            ? 'https://formulae.brew.sh/formula/ghostscript'
+            : 'https://www.ghostscript.com/releases/',
+          urlLabel: 'Scarica',
+          brew: isMac ? 'brew install ghostscript' : null,
+        },
+      ],
     });
   }
 
   const banner = document.getElementById('deps-warning');
   if (!banner) return;
 
-  // Se tutto OK: nasconde il banner e non mostra nulla
-  if (missing.length === 0) {
+  // Se tutto OK: banner nascosto
+  if (required.length === 0 && optional.length === 0) {
     banner.classList.add('hidden');
     return;
   }
 
-  // Costruisce il banner con i link
-  banner.innerHTML = `
-    <div class="deps-warning-title">
-      Dipendenze mancanti — l'app non funzionerà correttamente senza di esse
-    </div>
-    <div class="deps-list">
-      ${missing.map(dep => `
-        <div class="dep-item">
-          <div class="dep-item-text">
-            <div class="dep-name">${dep.name}</div>
-            <div class="dep-desc">${dep.desc}${dep.note ? `<br><em>${dep.note}</em>` : ''}</div>
-          </div>
-          <div class="dep-actions">
-            ${dep.brew
-              ? `<span class="btn-brew" onclick="copyBrew('${dep.brew}')" title="Copia comando Homebrew">${dep.brew}</span>`
-              : ''}
-            <a class="btn-download" href="${dep.url}" target="_blank" rel="noopener">
-              ↓ ${dep.urlLabel}
-            </a>
-          </div>
+  // ── Rendering banner ──────────────────────────────────────────────────────
+  function renderItem(item) {
+    return `
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        ${item.brew
+          ? `<span class="btn-brew" onclick="copyBrew('${item.brew}')" title="Copia comando Homebrew">${item.brew}</span>`
+          : ''}
+        <a class="btn-download" href="${item.url}" target="_blank" rel="noopener">
+          ↓ ${item.urlLabel}
+        </a>
+        ${item.note ? `<span style="font-size:11px;color:#9A7020"><em>${item.note}</em></span>` : ''}
+      </div>`;
+  }
+
+  function renderGroup(dep, isRequired) {
+    const hasMultipleItems = dep.items && dep.items.length > 1;
+    return `
+      <div class="dep-item${isRequired ? '' : ' dep-item-optional'}">
+        <div class="dep-item-text">
+          <div class="dep-name">${isRequired ? '' : '<span class="dep-badge-opt">opzionale</span> '}${dep.name}</div>
+          <div class="dep-desc">${dep.desc}</div>
+          ${dep.items
+            ? dep.items.map(renderItem).join('')
+            : renderItem(dep)}
         </div>
-      `).join('')}
-    </div>
+      </div>`;
+  }
+
+  banner.innerHTML = `
+    ${required.length > 0 ? `
+      <div class="deps-warning-title">
+        Dipendenze mancanti — alcune funzioni non saranno disponibili
+      </div>
+      <div class="deps-list">
+        ${required.map(d => renderGroup(d, true)).join('')}
+      </div>
+    ` : ''}
+    ${optional.length > 0 ? `
+      <div class="deps-warning-title" style="color:#5A6E65;font-size:12px;margin-top:${required.length > 0 ? '12px' : '0'}">
+        Facoltativo — migliora la qualità di conversione
+      </div>
+      <div class="deps-list">
+        ${optional.map(d => renderGroup(d, false)).join('')}
+      </div>
+    ` : ''}
     <div class="deps-warning-footer">
       Dopo l'installazione, riavvia l'app per aggiornare questo avviso.
     </div>

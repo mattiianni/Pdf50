@@ -627,13 +627,19 @@ def cancel_job(job_id):
 @app.route('/api/system-info')
 def system_info():
     lo = converter.find_libreoffice()
+    ms_office = converter.has_microsoft_office()
     ocr_ok = ocr_processor.is_available()
     ita_ok = ocr_processor.has_italian_tessdata()
     gs_ok = ocr_processor.has_ghostscript()
 
+    # Può convertire DOCX/XLSX/PPTX se ha almeno uno tra Office e LibreOffice
+    can_convert_office = ms_office or (lo is not None)
+
     info = {
         'libreoffice': lo is not None,
         'libreoffice_path': lo,
+        'ms_office': ms_office,
+        'can_convert_office': can_convert_office,
         'ocrmypdf': ocr_ok,
         'tesseract_italian': ita_ok,
         'ghostscript': gs_ok,
