@@ -201,17 +201,21 @@ def _try_applescript_word(file_path: str, output_dir: str) -> tuple:
 
     script = f'''
 tell application "Microsoft Word"
-    open POSIX file "{abs_input}"
-    delay 2
-    set theDoc to active document
-    save as theDoc file name "{abs_output}" file format format PDF
-    close theDoc saving no
+    try
+        open POSIX file "{abs_input}"
+        delay 2
+        set theDoc to active document
+        save as theDoc file name "{abs_output}" file format format PDF
+        close theDoc saving no
+    on error errMsg
+        return "ERRORE: " & errMsg
+    end try
 end tell
 '''
     try:
         r = subprocess.run(
             ['osascript', '-e', script],
-            capture_output=True, text=True, timeout=120
+            capture_output=True, text=True, timeout=45
         )
         if os.path.isfile(dest) and os.path.getsize(dest) > 0:
             return dest, None
@@ -253,10 +257,16 @@ def _try_docx2pdf(file_path: str, output_dir: str) -> tuple:
         if sys.platform == 'win32':
             return _try_win32com(trusted_copy, dest)
         else:
-            # macOS / Linux: usa docx2pdf (AppleScript)
+            # macOS / Linux: usa docx2pdf (AppleScript) con timeout
+            import concurrent.futures
             try:
                 from docx2pdf import convert as _convert
-                _convert(trusted_copy, dest)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                    future = ex.submit(_convert, trusted_copy, dest)
+                    try:
+                        future.result(timeout=45)
+                    except concurrent.futures.TimeoutError:
+                        return None, 'timeout docx2pdf (45s) — file bloccato in Word'
                 if os.path.isfile(dest) and os.path.getsize(dest) > 0:
                     return dest, None
                 return None, 'output PDF vuoto'
