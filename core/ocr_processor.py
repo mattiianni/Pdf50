@@ -177,8 +177,7 @@ def apply_ocr(input_pdf: str, output_pdf: str, language: str = 'ita') -> bool:
             force_ocr=True,
             optimize=optimize,
             progress_bar=False,
-            # skip_big=False: non saltare immagini grandi (default ocrmypdf)
-            # oversample non impostato: ocrmypdf sceglie la risoluzione ottimale
+            invalidate_digital_signatures=True,
         )
 
         if os.path.isfile(output_pdf) and os.path.getsize(output_pdf) > 0:

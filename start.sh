@@ -9,18 +9,23 @@ echo " Split PDF 50 - Avvio server..."
 echo " ─────────────────────────────────────────"
 echo ""
 
-# Controlla Python 3
-if ! command -v python3 &>/dev/null; then
+# Usa il virtualenv se presente, altrimenti cerca python3
+if [ -f "$SCRIPT_DIR/.venv/bin/python3" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+    PIP="$SCRIPT_DIR/.venv/bin/pip"
+elif command -v python3 &>/dev/null; then
+    PYTHON="python3"
+    PIP="pip3"
+else
     echo " [ERRORE] Python 3 non trovato."
     echo " Installalo con: brew install python3  (macOS)"
-    echo "            oppure: sudo apt install python3  (Linux)"
     exit 1
 fi
 
-# Installa dipendenze se necessario
-if [ ! -f ".deps_installed" ]; then
+# Installa dipendenze se necessario (solo senza venv)
+if [ ! -f "$SCRIPT_DIR/.venv/bin/python3" ] && [ ! -f ".deps_installed" ]; then
     echo " Installazione dipendenze Python..."
-    pip3 install -r requirements.txt
+    "$PIP" install -r requirements.txt
     touch .deps_installed
     echo " Dipendenze installate."
     echo ""
@@ -29,10 +34,9 @@ fi
 # Genera l'icona (solo al primo avvio)
 if [ ! -f "icon.png" ]; then
     echo " Generazione icona..."
-    python3 genera_icona.py
-    # Rendi eseguibile lo script del .app bundle
+    "$PYTHON" genera_icona.py
     chmod +x "Split PDF 50.app/Contents/MacOS/splitpdf50" 2>/dev/null || true
 fi
 
 # Avvia il server
-python3 app.py
+"$PYTHON" app.py

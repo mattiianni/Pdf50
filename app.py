@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from core import file_scanner, converter, ocr_processor, pdf_merger, pdf_splitter
 
 app = Flask(__name__, static_folder='static')
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024   # 500 MB max upload
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024 * 1024   # 10 GB max upload
 
 # Storage in-memory dei job
 jobs = {}
