@@ -406,7 +406,8 @@ def _run_per_folder(job_id: str, source_path: str, output_path: str):
             groups[group_key].append(fi)
 
         # Se tutti i file finiscono in un unico gruppo di primo livello,
-        # scendi automaticamente al livello successivo (es. selezione cartella padre)
+        # scendi automaticamente al livello successivo (es. selezione cartella padre).
+        # Il nome del gruppo include il percorso completo: "UNICO - Mio"
         if len(groups) == 1:
             only_key = next(iter(groups))
             drill = defaultdict(list)
@@ -414,7 +415,8 @@ def _run_per_folder(job_id: str, source_path: str, output_path: str):
                 rf = fi.get('rel_folder', '')
                 parts = rf.replace('\\', '/').split('/') if rf else []
                 if len(parts) >= 2 and parts[0] == only_key:
-                    drill[parts[1]].append(fi)
+                    full_key = f'{only_key} - {parts[1]}'
+                    drill[full_key].append(fi)
                 else:
                     drill[only_key].append(fi)
             if len(drill) > 1:
