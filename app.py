@@ -406,8 +406,10 @@ def _run_per_folder(job_id: str, source_path: str, output_path: str):
             groups[group_key].append(fi)
 
         # Se tutti i file finiscono in un unico gruppo di primo livello,
-        # scendi automaticamente al livello successivo (es. selezione cartella padre).
-        # Il nome del gruppo include il percorso completo: "UNICO - Mio"
+        # prova a scendere al livello successivo per produrre più gruppi.
+        # Se anche quello è unico (o non esiste), e il nome non è già il
+        # nome della cartella radice, prefissa con "radice - gruppo"
+        # (es. "RENDICONTI - DICH.SPESA IVSALBIS").
         if len(groups) == 1:
             only_key = next(iter(groups))
             drill = defaultdict(list)
@@ -422,6 +424,11 @@ def _run_per_folder(job_id: str, source_path: str, output_path: str):
             if len(drill) > 1:
                 log(f'  → unico gruppo "{only_key}", scendo al livello successivo')
                 groups = drill
+            elif only_key != root_folder_name:
+                # Unico sottogruppo e non si può scendere: prefissa con il nome radice
+                new_key = f'{root_folder_name} - {only_key}'
+                log(f'  → unico gruppo "{only_key}", rinominato in "{new_key}"')
+                groups = {new_key: groups[only_key]}
 
         group_keys = sorted(groups.keys(), key=lambda k: k.lower())
         total_groups = len(group_keys)
