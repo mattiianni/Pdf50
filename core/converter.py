@@ -180,6 +180,47 @@ def _try_win32com(docx_path: str, pdf_path: str) -> tuple:
             pass
 
 
+# ── Helper: AppleScript diretto per .doc su macOS ────────────────────────────
+
+def _try_applescript_word(file_path: str, output_dir: str) -> tuple:
+    """
+    Apre il file in Microsoft Word via AppleScript e lo esporta come PDF.
+    Funziona anche con .doc binario (Word 97-2003) che docx2pdf non gestisce.
+    Ritorna (percorso_pdf, None) oppure (None, str_errore).
+    """
+    if sys.platform != 'darwin':
+        return None, 'AppleScript disponibile solo su macOS'
+
+    if not os.path.isdir('/Applications/Microsoft Word.app'):
+        return None, 'Microsoft Word non trovato'
+
+    base = os.path.splitext(os.path.basename(file_path))[0]
+    dest = os.path.join(output_dir, f'{base}_{uuid.uuid4().hex[:8]}.pdf')
+    abs_input = os.path.abspath(file_path)
+    abs_output = os.path.abspath(dest)
+
+    script = f'''
+tell application "Microsoft Word"
+    open POSIX file "{abs_input}"
+    delay 2
+    set theDoc to active document
+    save as theDoc file name "{abs_output}" file format format PDF
+    close theDoc saving no
+end tell
+'''
+    try:
+        r = subprocess.run(
+            ['osascript', '-e', script],
+            capture_output=True, text=True, timeout=120
+        )
+        if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+            return dest, None
+        err = (r.stderr or r.stdout or '').strip()
+        return None, f'AppleScript Word: {err or "output vuoto"}'
+    except Exception as e:
+        return None, f'AppleScript Word: {e}'
+
+
 # ── Helper: docx2pdf (Office COM / AppleScript) ───────────────────────────────
 
 def _try_docx2pdf(file_path: str, output_dir: str) -> tuple:
@@ -233,11 +274,18 @@ def _convert_docx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
     ext = os.path.splitext(file_path)[1].lower()
     step_errors = []
 
-    # 1) Office COM (Word/Mac Word)
+    # 1) Office COM (Word/Mac Word via docx2pdf)
     result, err = _try_docx2pdf(file_path, output_dir)
     if result:
         return result
     step_errors.append(f'Office COM: {err or "?"}')
+
+    # 1b) Fallback AppleScript diretto (gestisce .doc binario su macOS)
+    if sys.platform == 'darwin' and ext in ('.doc', '.docx', '.rtf'):
+        result, err = _try_applescript_word(file_path, output_dir)
+        if result:
+            return result
+        step_errors.append(f'AppleScript Word: {err or "?"}')
 
     # 2) mammoth -> testo -> fpdf2 (non richiede GTK/WeasyPrint)
     if ext in ('.docx', '.doc', '.rtf'):
