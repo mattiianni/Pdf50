@@ -261,12 +261,15 @@ def _try_docx2pdf(file_path: str, output_dir: str) -> tuple:
             import concurrent.futures
             try:
                 from docx2pdf import convert as _convert
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                    future = ex.submit(_convert, trusted_copy, dest)
-                    try:
-                        future.result(timeout=45)
-                    except concurrent.futures.TimeoutError:
-                        return None, 'timeout docx2pdf (45s) — file bloccato in Word'
+                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                future = executor.submit(_convert, trusted_copy, dest)
+                try:
+                    future.result(timeout=45)
+                except concurrent.futures.TimeoutError:
+                    executor.shutdown(wait=False)  # non bloccare sul thread zombie
+                    return None, 'timeout docx2pdf (45s) — file bloccato in Word'
+                finally:
+                    executor.shutdown(wait=False)
                 if os.path.isfile(dest) and os.path.getsize(dest) > 0:
                     return dest, None
                 return None, 'output PDF vuoto'
@@ -291,7 +294,11 @@ def _convert_docx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
     step_errors.append(f'Office COM: {err or "?"}')
 
     # 1b) Fallback AppleScript diretto (gestisce .doc binario su macOS)
-    if sys.platform == 'darwin' and ext in ('.doc', '.docx', '.rtf'):
+    # Salta se docx2pdf ha già segnalato Word occupato (timeout o errore Word)
+    _word_busy = step_errors and any(
+        k in step_errors[0] for k in ('timeout', 'Messaggio', 'incomprensibile', 'busy')
+    )
+    if sys.platform == 'darwin' and ext in ('.doc', '.docx', '.rtf') and not _word_busy:
         result, err = _try_applescript_word(file_path, output_dir)
         if result:
             return result
