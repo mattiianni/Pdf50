@@ -293,6 +293,18 @@ def _convert_docx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
         return result
     step_errors.append(f'Office COM: {err or "?"}')
 
+    # Dopo un fallimento Word su macOS: chiudi subito tutti i documenti aperti
+    # per evitare che un dialog rimasto aperto blocchi le conversioni successive
+    if sys.platform == 'darwin':
+        try:
+            subprocess.run(
+                ['osascript', '-e',
+                 'tell application "Microsoft Word"\ntry\nclose every document saving no\nend try\nend tell'],
+                capture_output=True, timeout=5
+            )
+        except Exception:
+            pass
+
     # 1b) Fallback AppleScript diretto — solo per .doc binario (Word 97-2003)
     # Per .docx/.rtf docx2pdf ha già tentato Word: inutile riprovare con AppleScript
     if sys.platform == 'darwin' and ext == '.doc':
