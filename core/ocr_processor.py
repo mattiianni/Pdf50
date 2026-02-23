@@ -174,10 +174,12 @@ def apply_ocr(input_pdf: str, output_pdf: str, language: str = 'ita') -> bool:
             input_pdf,
             output_pdf,
             language=language,
-            force_ocr=True,
+            skip_text=True,          # salta pagine che hanno già testo (molto più veloce)
             optimize=optimize,
             progress_bar=False,
             invalidate_digital_signatures=True,
+            jobs=os.cpu_count() or 2,  # parallelizza su tutti i core disponibili
+            tesseract_timeout=60,    # max 60s per pagina, poi la salta
         )
 
         if os.path.isfile(output_pdf) and os.path.getsize(output_pdf) > 0:
