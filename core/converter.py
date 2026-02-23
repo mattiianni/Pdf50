@@ -137,6 +137,8 @@ def _convert_office_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str
 def _try_win32com(docx_path: str, pdf_path: str) -> tuple:
     """
     Conversione tramite Word COM con soppressione completa dei dialoghi.
+    Wrappata in un thread con timeout 30s: Word può bloccarsi su dialoghi
+    anche con DisplayAlerts=0 (es. file corrotti, macro, password).
     Ritorna (percorso_pdf, None) oppure (None, str_errore).
     """
     try:
@@ -145,39 +147,60 @@ def _try_win32com(docx_path: str, pdf_path: str) -> tuple:
     except ImportError:
         return None, 'win32com non disponibile'
 
-    word = None
-    try:
-        pythoncom.CoInitialize()
-        word = win32client.Dispatch('Word.Application')
-        word.Visible = False
-        word.DisplayAlerts = 0   # wdAlertsNone: nessun dialogo
+    import concurrent.futures as _cf
 
-        doc = word.Documents.Open(
-            os.path.abspath(docx_path),
-            ReadOnly=True,
-            AddToRecentFiles=False,
-            ConfirmConversions=False,
-        )
+    def _do_convert():
+        word = None
         try:
-            doc.SaveAs2(os.path.abspath(pdf_path), FileFormat=17)  # wdFormatPDF
-        finally:
-            doc.Close(SaveChanges=0)   # wdDoNotSaveChanges
-
-        if os.path.isfile(pdf_path) and os.path.getsize(pdf_path) > 0:
-            return pdf_path, None
-        return None, 'output PDF vuoto dopo SaveAs2'
-    except Exception as e:
-        return None, str(e)
-    finally:
-        if word is not None:
+            pythoncom.CoInitialize()
+            word = win32client.Dispatch('Word.Application')
+            word.Visible = False
+            word.DisplayAlerts = 0   # wdAlertsNone: nessun dialogo
+            doc = word.Documents.Open(
+                os.path.abspath(docx_path),
+                ReadOnly=True,
+                AddToRecentFiles=False,
+                ConfirmConversions=False,
+            )
             try:
-                word.Quit()
+                doc.SaveAs2(os.path.abspath(pdf_path), FileFormat=17)  # wdFormatPDF
+            finally:
+                doc.Close(SaveChanges=0)   # wdDoNotSaveChanges
+            if os.path.isfile(pdf_path) and os.path.getsize(pdf_path) > 0:
+                return pdf_path, None
+            return None, 'output PDF vuoto dopo SaveAs2'
+        except Exception as e:
+            return None, str(e)
+        finally:
+            if word is not None:
+                try:
+                    word.Quit()
+                except Exception:
+                    pass
+            try:
+                pythoncom.CoUninitialize()
             except Exception:
                 pass
+
+    ex = _cf.ThreadPoolExecutor(max_workers=1)
+    fut = ex.submit(_do_convert)
+    try:
+        result = fut.result(timeout=30)
+        return result
+    except _cf.TimeoutError:
+        ex.shutdown(wait=False)
+        # Force-killa WINWORD.EXE per liberare dialoghi bloccati
         try:
-            pythoncom.CoUninitialize()
+            subprocess.run(['taskkill', '/F', '/IM', 'WINWORD.EXE'],
+                           capture_output=True, timeout=5)
         except Exception:
             pass
+        return None, 'timeout win32com (30s) — Word bloccato su dialogo'
+    except Exception as e:
+        ex.shutdown(wait=False)
+        return None, str(e)
+    finally:
+        ex.shutdown(wait=False)
 
 
 # ── Helper: AppleScript diretto per .doc su macOS ────────────────────────────
@@ -257,24 +280,45 @@ def _try_docx2pdf(file_path: str, output_dir: str) -> tuple:
         if sys.platform == 'win32':
             return _try_win32com(trusted_copy, dest)
         else:
-            # macOS / Linux: usa docx2pdf (AppleScript) con timeout
-            import concurrent.futures
+            # macOS: esegui docx2pdf in un subprocess separato con setsid.
+            # Usando un process group possiamo killare l'intero albero
+            # (python → osascript → eventuale Word bloccato su dialogo).
+            # ThreadPoolExecutor NON funziona: il thread zombie continua a
+            # tenere osascript vivo anche dopo il timeout.
             try:
-                from docx2pdf import convert as _convert
-                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-                future = executor.submit(_convert, trusted_copy, dest)
+                import docx2pdf  # verifica disponibilità
+            except ImportError:
+                return None, 'docx2pdf non disponibile'
+
+            import os as _os, signal as _signal
+            proc = subprocess.Popen(
+                [sys.executable, '-c',
+                 'import sys; from docx2pdf import convert; convert(sys.argv[1], sys.argv[2])',
+                 trusted_copy, dest],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                preexec_fn=_os.setsid,   # nuovo process group
+            )
+            try:
+                proc.communicate(timeout=20)
+            except subprocess.TimeoutExpired:
+                # Killa l'intero process group (python + osascript + figli)
                 try:
-                    future.result(timeout=20)
-                except concurrent.futures.TimeoutError:
-                    executor.shutdown(wait=False)  # non bloccare sul thread zombie
-                    return None, 'timeout docx2pdf (20s) — file bloccato in Word'
-                finally:
-                    executor.shutdown(wait=False)
-                if os.path.isfile(dest) and os.path.getsize(dest) > 0:
-                    return dest, None
-                return None, 'output PDF vuoto'
-            except Exception as e:
-                return None, str(e)
+                    _os.killpg(_os.getpgid(proc.pid), _signal.SIGKILL)
+                except Exception:
+                    proc.kill()
+                try:
+                    proc.communicate(timeout=2)
+                except Exception:
+                    pass
+                # Force-killa Word per liberare dialoghi bloccati
+                subprocess.run(['killall', '-9', 'Microsoft Word'],
+                               capture_output=True, timeout=3)
+                return None, 'timeout docx2pdf (20s) — file bloccato in Word'
+
+            if proc.returncode == 0 and os.path.isfile(dest) and os.path.getsize(dest) > 0:
+                return dest, None
+            return None, f'docx2pdf exit {proc.returncode}'
     except Exception as e:
         return None, str(e)
     finally:
@@ -293,15 +337,14 @@ def _convert_docx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
         return result
     step_errors.append(f'Office COM: {err or "?"}')
 
-    # Dopo un fallimento Word su macOS: chiudi subito tutti i documenti aperti
-    # per evitare che un dialog rimasto aperto blocchi le conversioni successive
+    # Dopo un fallimento Word su macOS: force-killa Word per garantire
+    # che nessun dialogo rimanga aperto e blocchi le conversioni successive.
+    # Non usiamo AppleScript "close every document" perché anche quel comando
+    # può bloccarsi se Word sta mostrando un dialogo di errore.
     if sys.platform == 'darwin':
         try:
-            subprocess.run(
-                ['osascript', '-e',
-                 'tell application "Microsoft Word"\ntry\nclose every document saving no\nend try\nend tell'],
-                capture_output=True, timeout=5
-            )
+            subprocess.run(['killall', '-9', 'Microsoft Word'],
+                           capture_output=True, timeout=5)
         except Exception:
             pass
 
@@ -318,6 +361,7 @@ def _convert_docx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
         try:
             import mammoth
             import zipfile
+            import concurrent.futures as _cf
             from fpdf import FPDF
 
             # Valida che il file sia un ZIP valido prima di passarlo a mammoth
@@ -329,8 +373,20 @@ def _convert_docx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
                 except Exception as _ze:
                     raise RuntimeError(f'File non è un docx valido (ZIP corrotto): {_ze}')
 
-            with open(file_path, 'rb') as f:
-                raw = mammoth.extract_raw_text(f)
+            # Estrai testo con timeout: mammoth può bloccarsi su XML corrotto
+            def _mammoth_extract(fp):
+                with open(fp, 'rb') as f:
+                    return mammoth.extract_raw_text(f)
+
+            _mex = _cf.ThreadPoolExecutor(max_workers=1)
+            _mfut = _mex.submit(_mammoth_extract, file_path)
+            try:
+                raw = _mfut.result(timeout=30)
+            except _cf.TimeoutError:
+                _mex.shutdown(wait=False)
+                raise RuntimeError('mammoth timeout (30s) — XML corrotto o file troppo grande')
+            finally:
+                _mex.shutdown(wait=False)
 
             text = raw.value
             if text.strip():
