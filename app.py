@@ -405,6 +405,22 @@ def _run_per_folder(job_id: str, source_path: str, output_path: str):
                 group_key = parts[0]
             groups[group_key].append(fi)
 
+        # Se tutti i file finiscono in un unico gruppo di primo livello,
+        # scendi automaticamente al livello successivo (es. selezione cartella padre)
+        if len(groups) == 1:
+            only_key = next(iter(groups))
+            drill = defaultdict(list)
+            for fi in groups[only_key]:
+                rf = fi.get('rel_folder', '')
+                parts = rf.replace('\\', '/').split('/') if rf else []
+                if len(parts) >= 2 and parts[0] == only_key:
+                    drill[parts[1]].append(fi)
+                else:
+                    drill[only_key].append(fi)
+            if len(drill) > 1:
+                log(f'  → unico gruppo "{only_key}", scendo al livello successivo')
+                groups = drill
+
         group_keys = sorted(groups.keys(), key=lambda k: k.lower())
         total_groups = len(group_keys)
         log(f'Sottocartelle da elaborare: {total_groups}')

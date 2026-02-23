@@ -10,7 +10,7 @@ import os
 import tempfile
 import shutil
 
-TARGET_BYTES = 49 * 1024 * 1024   # 49 MB
+TARGET_BYTES = 46 * 1024 * 1024   # 46 MB (margine per overhead pypdf lazy-loading)
 MAX_DEPTH = 20                    # massimo iterazioni binary search per chunk
 
 
