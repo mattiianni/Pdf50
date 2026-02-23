@@ -305,7 +305,17 @@ def _convert_docx_to_pdf(file_path: str, output_dir: str, lo_path: str) -> str:
     if ext in ('.docx', '.doc', '.rtf'):
         try:
             import mammoth
+            import zipfile
             from fpdf import FPDF
+
+            # Valida che il file sia un ZIP valido prima di passarlo a mammoth
+            # (un .docx corrotto può bloccare indefinitamente il parser ZIP)
+            if ext in ('.docx', '.doc'):
+                try:
+                    with zipfile.ZipFile(file_path, 'r') as _z:
+                        _z.testzip()
+                except Exception as _ze:
+                    raise RuntimeError(f'File non è un docx valido (ZIP corrotto): {_ze}')
 
             with open(file_path, 'rb') as f:
                 raw = mammoth.extract_raw_text(f)
