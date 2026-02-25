@@ -1009,6 +1009,32 @@ body {
   cursor: pointer;
 }
 
+.op-card-label.op-card-full {
+  grid-column: 1 / -1;
+}
+
+.op-card-label.op-card-full .op-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.op-card-label.op-card-full .op-card-ico {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.op-card-label.op-card-full .op-card strong,
+.op-card-label.op-card-full .op-card span {
+  display: inline;
+}
+
+.op-card-label.op-card-full .op-card strong::after {
+  content: ' — ';
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
 .op-card-label input[type="radio"] {
   display: none;
 }

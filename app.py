@@ -37,7 +37,7 @@ if sys.platform == 'darwin':
     if _missing:
         os.environ['PATH'] = ':'.join(_missing) + (':' + _current if _current else '')
 
-from core import file_scanner, converter, ocr_processor, pdf_merger, pdf_splitter
+from core import file_scanner, converter, ocr_processor, pdf_merger, pdf_splitter, pdf_extractor
 
 app = Flask(__name__, static_folder='static')
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024 * 1024   # 10 GB max upload
@@ -754,6 +754,28 @@ def post_page_count():
         return jsonify({'ok': True, 'pages': pages})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/post/extract-text', methods=['POST'])
+def post_extract_text():
+    data       = request.get_json() or {}
+    pdf_path   = data.get('pdf_path',  '').strip()
+    output_dir = (data.get('output_dir') or '').strip()
+
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return jsonify({'ok': False, 'error': 'File non trovato'}), 400
+
+    if not output_dir:
+        output_dir = os.path.dirname(pdf_path)
+    os.makedirs(output_dir, exist_ok=True)
+
+    base     = os.path.splitext(os.path.basename(pdf_path))[0]
+    out_path = os.path.join(output_dir, f'{base}_testo.txt')
+
+    result = pdf_extractor.extract_text(pdf_path, out_path)
+    if result['ok']:
+        result['output_path'] = out_path
+    return jsonify(result)
 
 
 @app.route('/api/cleanup-temp', methods=['POST'])

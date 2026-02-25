@@ -642,6 +642,20 @@ async function startPdfOp() {
         {orig_mb: undefined, size_mb: undefined} : undefined)};
     }
 
+    // --- Estrai testo ---
+    if (op === 'extract-text') {
+      document.getElementById('progress-step-label').textContent = 'Estrazione testo...';
+      document.getElementById('progress-bar').style.width = '60%';
+
+      const res  = await fetch('/api/post/extract-text', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pdf_path: pdfPath, output_dir: outputDir}),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Errore estrazione testo');
+      result = {type: 'extract-text', ...data};
+    }
+
     // --- Dividi per range ---
     if (op === 'split-ranges') {
       const ranges = _collectRanges('ranges-list');
@@ -681,6 +695,36 @@ function showPdfOpResult(result, op) {
   document.getElementById('result-card').classList.remove('hidden');
 
   const container = document.getElementById('result-content');
+
+  if (result.type === 'extract-text') {
+    const pagesNote = result.pages_with_text < result.pages
+      ? ` <span style="color:var(--warn);font-size:12px">(${result.pages - result.pages_with_text} pag. senza testo saltate)</span>`
+      : '';
+    container.innerHTML = `
+      <div class="result-header">
+        <div class="result-icon">📄</div>
+        <div>
+          <div class="result-title">Testo estratto con successo</div>
+          <div class="result-subtitle">${result.filename}</div>
+        </div>
+      </div>
+      <div class="result-stats">
+        <div class="stat-box">
+          <div class="stat-value">${result.size_kb} KB</div>
+          <div class="stat-label">Dimensione .txt</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${result.chars.toLocaleString('it-IT')}</div>
+          <div class="stat-label">Caratteri</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${result.pages_with_text}/${result.pages}</div>
+          <div class="stat-label">Pagine con testo${pagesNote}</div>
+        </div>
+      </div>`;
+    // Nessun post-processing per file di testo
+    return;
+  }
 
   if (result.type === 'compress') {
     const saved = result.orig_mb - result.size_mb;
