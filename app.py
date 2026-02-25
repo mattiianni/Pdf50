@@ -20,6 +20,23 @@ from flask import Flask, request, jsonify, Response, send_from_directory
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+# ── Estendi il PATH con le directory di Homebrew / MacPorts / standard ────────
+# Necessario quando l'app viene avviata tramite .app bundle (AppleScript),
+# che usa una shell con PATH minimale privo di /opt/homebrew/bin.
+if sys.platform == 'darwin':
+    _extra = [
+        '/opt/homebrew/bin',        # Homebrew Apple Silicon
+        '/opt/homebrew/sbin',
+        '/usr/local/bin',           # Homebrew Intel
+        '/usr/local/sbin',
+        '/opt/local/bin',           # MacPorts
+        '/opt/local/sbin',
+    ]
+    _current = os.environ.get('PATH', '')
+    _missing = [p for p in _extra if p not in _current.split(':')]
+    if _missing:
+        os.environ['PATH'] = ':'.join(_missing) + (':' + _current if _current else '')
+
 from core import file_scanner, converter, ocr_processor, pdf_merger, pdf_splitter
 
 app = Flask(__name__, static_folder='static')
