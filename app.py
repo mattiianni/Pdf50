@@ -37,6 +37,24 @@ if sys.platform == 'darwin':
     if _missing:
         os.environ['PATH'] = ':'.join(_missing) + (':' + _current if _current else '')
 
+elif sys.platform == 'win32':
+    # Su Windows aggiunge i percorsi comuni di Ghostscript al PATH
+    # (non incluso di default a meno che l'installatore non lo faccia)
+    import glob as _glob
+    _gs_extra = []
+    for _pat in [
+        r'C:\Program Files\gs\gs*\bin',
+        r'C:\Program Files (x86)\gs\gs*\bin',
+    ]:
+        _matches = sorted(_glob.glob(_pat))
+        if _matches:
+            _gs_extra.append(_matches[-1])   # versione più recente
+    if _gs_extra:
+        _current = os.environ.get('PATH', '')
+        _missing = [p for p in _gs_extra if p not in _current.split(';')]
+        if _missing:
+            os.environ['PATH'] = ';'.join(_missing) + (';' + _current if _current else '')
+
 from core import file_scanner, converter, ocr_processor, pdf_merger, pdf_splitter, pdf_extractor
 
 app = Flask(__name__, static_folder='static')
@@ -770,7 +788,7 @@ def post_extract_text():
     os.makedirs(output_dir, exist_ok=True)
 
     base     = os.path.splitext(os.path.basename(pdf_path))[0]
-    out_path = os.path.join(output_dir, f'{base}_testo.txt')
+    out_path = os.path.join(output_dir, f'{base}.txt')
 
     result = pdf_extractor.extract_text(pdf_path, out_path)
     if result['ok']:

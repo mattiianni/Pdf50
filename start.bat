@@ -7,20 +7,27 @@ echo  Split PDF 50 - Avvio server...
 echo  ─────────────────────────────────────────
 echo.
 
-:: Controlla se Python e' installato
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo  [ERRORE] Python non trovato.
-    echo  Scaricalo da: https://www.python.org/downloads/
-    echo.
-    pause
-    exit /b 1
+:: Usa il virtualenv se presente, altrimenti cerca python nel PATH
+if exist ".venv\Scripts\python.exe" (
+    set PYTHON=.venv\Scripts\python.exe
+    set PIP=.venv\Scripts\pip.exe
+) else (
+    python --version >nul 2>&1
+    if errorlevel 1 (
+        echo  [ERRORE] Python non trovato.
+        echo  Scaricalo da: https://www.python.org/downloads/
+        echo.
+        pause
+        exit /b 1
+    )
+    set PYTHON=python
+    set PIP=pip
 )
 
 :: Installa/aggiorna le dipendenze se necessario
 if not exist ".deps_installed" (
     echo  Installazione dipendenze Python...
-    pip install -r requirements.txt
+    %PIP% install -r requirements.txt
     if errorlevel 1 (
         echo.
         echo  [ERRORE] Installazione dipendenze fallita.
@@ -36,10 +43,10 @@ if not exist ".deps_installed" (
 :: Genera l'icona e il collegamento Desktop (solo al primo avvio)
 if not exist "icon.ico" (
     echo  Generazione icona...
-    python genera_icona.py
+    %PYTHON% genera_icona.py
 )
 
 :: Avvia il server (il browser si apre automaticamente)
-python app.py
+%PYTHON% app.py
 
 pause
