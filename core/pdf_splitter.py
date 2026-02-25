@@ -76,6 +76,8 @@ def split_pdf_by_size(
     base_name: str,
     target_bytes: int = TARGET_BYTES,
     progress_callback=None,
+    part_label: str = 'Parte',
+    show_total: bool = True,
 ) -> list:
     """
     Divide il PDF in parti, ognuna <= target_bytes.
@@ -142,7 +144,10 @@ def split_pdf_by_size(
     # Seconda passata: scrive i file con la nomenclatura corretta
     parts = []
     for idx, (p_start, p_end) in enumerate(page_ranges, 1):
-        part_name = f'{base_name}_Parte {idx} di {total_parts}.pdf'
+        if show_total:
+            part_name = f'{base_name}_{part_label} {idx} di {total_parts}.pdf'
+        else:
+            part_name = f'{base_name}_{part_label} {idx}.pdf'
         part_path = os.path.join(output_dir, part_name)
 
         _write_chunk(reader, p_start, p_end, part_path)
@@ -162,5 +167,55 @@ def split_pdf_by_size(
 
         if progress_callback:
             progress_callback(idx, total_parts)
+
+    return parts
+
+
+def split_by_ranges(input_path: str, ranges: list, output_dir: str,
+                    part_label: str = 'Parte', show_total: bool = True) -> list:
+    """
+    Divide il PDF in base a range di pagine specificati dall'utente.
+
+    Args:
+        input_path:  percorso del PDF sorgente
+        ranges:      lista di [start, end] (1-based, inclusi), es. [[1,80],[81,150]]
+        output_dir:  cartella di destinazione
+        part_label:  parola usata nel nome file (default "Parte")
+        show_total:  se True aggiunge "di N" nel nome file
+
+    Returns:
+        Lista di dict con info su ogni parte (name, path, pages, size_mb)
+    """
+    import pypdf
+
+    os.makedirs(output_dir, exist_ok=True)
+    reader = pypdf.PdfReader(input_path, strict=False)
+    total_pages = len(reader.pages)
+    base = os.path.splitext(os.path.basename(input_path))[0]
+
+    parts = []
+    for idx, (p_start, p_end) in enumerate(ranges, 1):
+        p_start = max(1, int(p_start))
+        p_end   = min(total_pages, int(p_end))
+        if p_start > p_end:
+            continue
+
+        total_r = len(ranges)
+        if show_total:
+            part_name = f'{base}_{part_label} {idx} di {total_r}_pag{p_start}-{p_end}.pdf'
+        else:
+            part_name = f'{base}_{part_label} {idx}_pag{p_start}-{p_end}.pdf'
+        part_path = os.path.join(output_dir, part_name)
+
+        _write_chunk(reader, p_start - 1, p_end, part_path)
+
+        size = os.path.getsize(part_path)
+        parts.append({
+            'name':      part_name,
+            'path':      part_path,
+            'pages':     f'{p_start}-{p_end}',
+            'num_pages': p_end - p_start + 1,
+            'size_mb':   round(size / (1024 * 1024), 2),
+        })
 
     return parts

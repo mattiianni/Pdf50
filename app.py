@@ -602,6 +602,143 @@ def upload_folder():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/upload-file', methods=['POST'])
+def upload_file():
+    """
+    Upload di un singolo file (PDF o altro).
+    Ritorna path sul server, metadati e flag is_pdf.
+    """
+    f = request.files.get('file')
+    if not f:
+        return jsonify({'error': 'Nessun file ricevuto'}), 400
+
+    filename = os.path.basename((f.filename or 'file').replace('\\', '/'))
+    tmp_dir = tempfile.mkdtemp(prefix='splitpdf50_up_')
+    dest = os.path.join(tmp_dir, filename)
+    f.save(dest)
+
+    ext = os.path.splitext(filename)[1].lower()
+    size_mb = round(os.path.getsize(dest) / (1024 * 1024), 2)
+
+    pages = None
+    if ext == '.pdf':
+        try:
+            pages = pdf_merger.get_page_count(dest)
+        except Exception:
+            pass
+
+    return jsonify({
+        'path':     dest,
+        'tmp_dir':  tmp_dir,
+        'filename': filename,
+        'ext':      ext,
+        'is_pdf':   ext == '.pdf',
+        'size_mb':  size_mb,
+        'pages':    pages,
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Route: post-elaborazione PDF (compress / split-size / split-ranges)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/post/compress', methods=['POST'])
+def post_compress():
+    from core import pdf_compressor
+    data = request.get_json() or {}
+    pdf_path   = data.get('pdf_path',   '').strip()
+    quality    = data.get('quality',    'ebook')
+    output_dir = (data.get('output_dir') or '').strip()
+
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return jsonify({'ok': False, 'error': 'File non trovato'}), 400
+
+    if not output_dir:
+        output_dir = os.path.dirname(pdf_path)
+    os.makedirs(output_dir, exist_ok=True)
+
+    base = os.path.splitext(os.path.basename(pdf_path))[0]
+    out  = os.path.join(output_dir, f'{base}_compresso.pdf')
+
+    result = pdf_compressor.compress_pdf(pdf_path, out, quality)
+    if result['ok']:
+        result['output_path'] = out
+        result['filename']    = os.path.basename(out)
+    return jsonify(result)
+
+
+@app.route('/api/post/split-size', methods=['POST'])
+def post_split_size():
+    data = request.get_json() or {}
+    pdf_path   = data.get('pdf_path',  '').strip()
+    target_mb  = float(data.get('target_mb', 46))
+    output_dir = (data.get('output_dir') or '').strip()
+
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return jsonify({'ok': False, 'error': 'File non trovato'}), 400
+
+    if not output_dir:
+        output_dir = os.path.dirname(pdf_path)
+    os.makedirs(output_dir, exist_ok=True)
+
+    base    = os.path.splitext(os.path.basename(pdf_path))[0]
+    sub_dir = os.path.join(output_dir, base)
+    os.makedirs(sub_dir, exist_ok=True)
+
+    part_label = (data.get('part_label') or 'Parte').strip() or 'Parte'
+    show_total = bool(data.get('show_total', True))
+
+    try:
+        target_bytes = int(target_mb * 1024 * 1024)
+        parts = pdf_splitter.split_pdf_by_size(
+            pdf_path, sub_dir, base, target_bytes=target_bytes,
+            part_label=part_label, show_total=show_total,
+        )
+        return jsonify({'ok': True, 'parts': parts, 'split_dir': sub_dir})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/post/split-ranges', methods=['POST'])
+def post_split_ranges():
+    data = request.get_json() or {}
+    pdf_path   = data.get('pdf_path',  '').strip()
+    ranges     = data.get('ranges',    [])   # [[start, end], ...]
+    output_dir = (data.get('output_dir') or '').strip()
+
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return jsonify({'ok': False, 'error': 'File non trovato'}), 400
+    if not ranges:
+        return jsonify({'ok': False, 'error': 'Nessun range specificato'}), 400
+
+    if not output_dir:
+        output_dir = os.path.dirname(pdf_path)
+    os.makedirs(output_dir, exist_ok=True)
+
+    part_label = (data.get('part_label') or 'Parte').strip() or 'Parte'
+    show_total = bool(data.get('show_total', True))
+
+    try:
+        parts = pdf_splitter.split_by_ranges(pdf_path, ranges, output_dir,
+                                             part_label=part_label, show_total=show_total)
+        return jsonify({'ok': True, 'parts': parts})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/post/page-count', methods=['POST'])
+def post_page_count():
+    data = request.get_json() or {}
+    pdf_path = data.get('pdf_path', '').strip()
+    if not pdf_path or not os.path.isfile(pdf_path):
+        return jsonify({'ok': False, 'error': 'File non trovato'}), 400
+    try:
+        pages = pdf_merger.get_page_count(pdf_path)
+        return jsonify({'ok': True, 'pages': pages})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @app.route('/api/cleanup-temp', methods=['POST'])
 def cleanup_temp():
     """Elimina una cartella temporanea di upload non più necessaria."""

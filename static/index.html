@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Split PDF 50</title>
+  <title>Split PDF 50 | Mattia Ianniello, 2026</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -15,8 +15,19 @@
   <header class="app-header">
     <div class="header-inner">
       <div class="logo">
-        <span class="logo-icon">⟁</span>
-        <span class="logo-text">Split PDF <span class="logo-accent">50</span></span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24"
+             fill="rgba(255,255,255,0.15)" stroke="white" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round" class="logo-svg">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8" fill="none"/>
+          <line x1="8" y1="13" x2="16" y2="13"/>
+          <line x1="8" y1="17" x2="16" y2="17"/>
+          <line x1="8" y1="21" x2="12" y2="21"/>
+        </svg>
+        <div class="logo-text-group">
+          <span class="logo-text">Split PDF <span class="logo-accent">50</span></span>
+          <span class="logo-sub">Mattia Ianniello, 2026</span>
+        </div>
       </div>
       <div id="sysinfo"></div>
     </div>
@@ -25,10 +36,10 @@
   <!-- ── MAIN ────────────────────────────────────────────────────── -->
   <main class="app-main">
 
-    <!-- BANNER DIPENDENZE MANCANTI (visibile solo se qualcosa manca) -->
+    <!-- BANNER DIPENDENZE MANCANTI -->
     <div id="deps-warning" class="deps-warning hidden"></div>
 
-    <!-- CARD SETUP (visibile inizialmente) -->
+    <!-- ── CARD SETUP ──────────────────────────────────────────── -->
     <section id="setup-card" class="card">
 
       <!-- Drop zone -->
@@ -42,18 +53,16 @@
             <polyline points="9 14 12 11 15 14"/>
           </svg>
         </div>
-        <p id="drop-title" class="drop-title">Trascina la cartella qui</p>
+        <p id="drop-title" class="drop-title">Trascina cartella o file PDF qui</p>
         <p id="drop-sub" class="drop-sub">oppure clicca per sfogliare</p>
         <p id="drop-status" class="drop-sub hidden" style="color:#4A7C6B;font-weight:500"></p>
-        <div id="drop-hint" class="drop-hint hidden">
-          Rilascia per selezionare la cartella
-        </div>
+        <div id="drop-hint" class="drop-hint hidden">Rilascia per selezionare</div>
       </div>
 
-      <!-- Info cartella sorgente (visibile dopo selezione) -->
+      <!-- Info sorgente: cartella -->
       <div id="source-info" class="folder-info hidden">
         <div class="folder-info-row">
-          <span class="folder-info-icon">📁</span>
+          <span class="folder-info-icon" id="source-icon">📁</span>
           <div class="folder-info-text">
             <span id="source-path-display" class="folder-path"></span>
             <span id="source-count" class="folder-count"></span>
@@ -62,14 +71,13 @@
         </div>
       </div>
 
-      <!-- Separatore -->
       <div class="divider"></div>
 
-      <!-- ── MODALITÀ OUTPUT ───────────────────────────────────── -->
-      <div class="option-group">
+      <!-- ── MODALITÀ OUTPUT (nascosta in modalità PDF) ──────── -->
+      <div id="mode-section" class="option-group">
         <label class="option-label">Il PDF di destinazione dovrà essere:</label>
         <div class="mode-selector">
-          <label class="mode-option" id="mode-unified-label">
+          <label class="mode-option">
             <input type="radio" name="mode" value="unified" id="mode-unified" checked />
             <div class="mode-card">
               <div class="mode-card-icon">
@@ -80,7 +88,6 @@
                   <polyline points="14 2 14 8 20 8"/>
                   <line x1="8" y1="13" x2="16" y2="13"/>
                   <line x1="8" y1="17" x2="16" y2="17"/>
-                  <polyline points="10 9 9 9 8 9"/>
                 </svg>
               </div>
               <div class="mode-card-text">
@@ -89,8 +96,7 @@
               </div>
             </div>
           </label>
-
-          <label class="mode-option" id="mode-perfolder-label">
+          <label class="mode-option">
             <input type="radio" name="mode" value="per_folder" id="mode-perfolder" />
             <div class="mode-card">
               <div class="mode-card-icon">
@@ -112,6 +118,156 @@
         </div>
       </div>
 
+      <!-- ── OPERAZIONI PDF (visibile solo in modalità PDF) ───── -->
+      <div id="pdf-ops-panel" class="hidden">
+        <div class="option-group">
+          <label class="option-label">Operazione da eseguire</label>
+          <div class="ops-grid">
+
+            <label class="op-card-label">
+              <input type="radio" name="pdfop" value="compress" onchange="updatePdfOpOptions()" checked/>
+              <div class="op-card">
+                <div class="op-card-ico">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
+                       fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
+                    <line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>
+                  </svg>
+                </div>
+                <strong>Comprimi</strong>
+                <span>Riduci dimensione con Ghostscript</span>
+              </div>
+            </label>
+
+            <label class="op-card-label">
+              <input type="radio" name="pdfop" value="split-size" onchange="updatePdfOpOptions()"/>
+              <div class="op-card">
+                <div class="op-card-ico">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
+                       fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                  </svg>
+                </div>
+                <strong>Dividi per dimensione</strong>
+                <span>Parti da 15 / 30 / 50 MB</span>
+              </div>
+            </label>
+
+            <label class="op-card-label">
+              <input type="radio" name="pdfop" value="split-ranges" onchange="updatePdfOpOptions()"/>
+              <div class="op-card">
+                <div class="op-card-ico">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
+                       fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                  </svg>
+                </div>
+                <strong>Dividi per range</strong>
+                <span>Scegli le pagine di ogni parte</span>
+              </div>
+            </label>
+
+            <label class="op-card-label">
+              <input type="radio" name="pdfop" value="compress+split" onchange="updatePdfOpOptions()"/>
+              <div class="op-card">
+                <div class="op-card-ico">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
+                       fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
+                    <line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>
+                  </svg>
+                </div>
+                <strong>Comprimi + Dividi</strong>
+                <span>Prima comprime, poi divide per dim</span>
+              </div>
+            </label>
+
+          </div>
+        </div>
+
+        <!-- Sub-opzioni: Compressione -->
+        <div id="pdfopts-compress" class="op-sub-opts">
+          <label class="option-label">Qualità immagini</label>
+          <div class="radio-group">
+            <label class="radio-line"><input type="radio" name="quality" value="screen"/>
+              <span><strong>Screen</strong> — 72 DPI &nbsp;·&nbsp; massimo risparmio</span></label>
+            <label class="radio-line"><input type="radio" name="quality" value="ebook" checked/>
+              <span><strong>Ebook</strong> — 150 DPI &nbsp;·&nbsp; bilanciato <em class="badge-rec">consigliato</em></span></label>
+            <label class="radio-line"><input type="radio" name="quality" value="printer"/>
+              <span><strong>Printer</strong> — 300 DPI &nbsp;·&nbsp; alta qualità</span></label>
+          </div>
+        </div>
+
+        <!-- Sub-opzioni: Split per dimensione -->
+        <div id="pdfopts-split-size" class="op-sub-opts hidden">
+          <label class="option-label">Dimensione massima per parte</label>
+          <div class="radio-group">
+            <label class="radio-line"><input type="radio" name="split-mb" value="15"/> <span>15 MB</span></label>
+            <label class="radio-line"><input type="radio" name="split-mb" value="30"/> <span>30 MB</span></label>
+            <label class="radio-line"><input type="radio" name="split-mb" value="50" checked/>
+              <span>50 MB <em class="badge-rec">consigliato</em></span></label>
+            <label class="radio-line">
+              <input type="radio" name="split-mb" value="custom"/>
+              <span>Personalizzata:
+                <input type="number" id="custom-mb" value="50" min="1" max="999"
+                       class="inline-num" onclick="this.previousElementSibling.previousElementSibling.checked=true"/> MB
+              </span>
+            </label>
+          </div>
+          <label class="option-label" style="margin-top:8px">Rinomina i file suddivisi</label>
+          <div class="radio-group">
+            <label class="radio-line">
+              <input type="radio" name="naming-ss" value="x_of_y" checked/>
+              <span>Parte X di Y <em class="naming-eg">es. Contratto_Parte 1 di 3.pdf</em></span>
+            </label>
+            <label class="radio-line">
+              <input type="radio" name="naming-ss" value="x"/>
+              <span>Parte X <em class="naming-eg">es. Contratto_Parte 1.pdf</em></span>
+            </label>
+            <label class="radio-line">
+              <input type="radio" name="naming-ss" value="custom"/>
+              <span>Personalizzata:&nbsp;
+                <input type="text" id="custom-naming-ss" class="naming-input" placeholder="es. Fascicolo"
+                       oninput="document.querySelector('input[name=naming-ss][value=custom]').checked=true"
+                       onclick="document.querySelector('input[name=naming-ss][value=custom]').checked=true"/>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Sub-opzioni: Split per range -->
+        <div id="pdfopts-split-ranges" class="op-sub-opts hidden">
+          <label class="option-label">
+            Range di pagine
+            <span id="range-total-label" class="option-label-note"></span>
+          </label>
+          <div id="ranges-list"></div>
+          <button class="btn-add-range" onclick="addRangeRow()">+ Aggiungi parte</button>
+          <label class="option-label" style="margin-top:8px">Rinomina i file suddivisi</label>
+          <div class="radio-group">
+            <label class="radio-line">
+              <input type="radio" name="naming-sr" value="x_of_y" checked/>
+              <span>Parte X di Y <em class="naming-eg">es. Contratto_Parte 1 di 3_pag1-80.pdf</em></span>
+            </label>
+            <label class="radio-line">
+              <input type="radio" name="naming-sr" value="x"/>
+              <span>Parte X <em class="naming-eg">es. Contratto_Parte 1_pag1-80.pdf</em></span>
+            </label>
+            <label class="radio-line">
+              <input type="radio" name="naming-sr" value="custom"/>
+              <span>Personalizzata:&nbsp;
+                <input type="text" id="custom-naming-sr" class="naming-input" placeholder="es. Sezione"
+                       oninput="document.querySelector('input[name=naming-sr][value=custom]').checked=true"
+                       onclick="document.querySelector('input[name=naming-sr][value=custom]').checked=true"/>
+              </span>
+            </label>
+          </div>
+        </div>
+
+      </div><!-- /pdf-ops-panel -->
+
       <!-- Cartella destinazione -->
       <div class="option-group">
         <label class="option-label">Cartella di destinazione</label>
@@ -128,44 +284,24 @@
 
     </section>
 
-    <!-- ── CARD PROGRESSO (visibile durante elaborazione) ──── -->
+    <!-- ── CARD PROGRESSO ───────────────────────────────────────── -->
     <section id="progress-card" class="card hidden">
-
       <div class="progress-header">
         <div class="progress-title-row">
           <h2 id="progress-step-label" class="progress-step-label">Elaborazione in corso...</h2>
           <button id="btn-cancel" class="btn-cancel" onclick="cancelJob()">Annulla</button>
         </div>
-
-        <!-- Indicatori step -->
-        <div class="steps-indicator">
-          <div class="step-item" id="step-1">
-            <div class="step-dot"></div>
-            <span>Scansione</span>
-          </div>
+        <div class="steps-indicator" id="steps-indicator">
+          <div class="step-item" id="step-1"><div class="step-dot"></div><span>Scansione</span></div>
           <div class="step-line"></div>
-          <div class="step-item" id="step-2">
-            <div class="step-dot"></div>
-            <span>Conversione</span>
-          </div>
+          <div class="step-item" id="step-2"><div class="step-dot"></div><span>Conversione</span></div>
           <div class="step-line"></div>
-          <div class="step-item" id="step-3">
-            <div class="step-dot"></div>
-            <span>OCR</span>
-          </div>
+          <div class="step-item" id="step-3"><div class="step-dot"></div><span>OCR</span></div>
           <div class="step-line"></div>
-          <div class="step-item" id="step-4">
-            <div class="step-dot"></div>
-            <span>Unione</span>
-          </div>
+          <div class="step-item" id="step-4"><div class="step-dot"></div><span>Unione</span></div>
           <div class="step-line"></div>
-          <div class="step-item" id="step-5">
-            <div class="step-dot"></div>
-            <span>Salvataggio</span>
-          </div>
+          <div class="step-item" id="step-5"><div class="step-dot"></div><span>Salvataggio</span></div>
         </div>
-
-        <!-- Barra progresso -->
         <div class="progress-bar-wrap">
           <div id="progress-bar" class="progress-bar"></div>
         </div>
@@ -174,8 +310,6 @@
           <span id="progress-count" class="progress-count"></span>
         </div>
       </div>
-
-      <!-- Log live -->
       <div class="log-container">
         <div class="log-header">
           <span>Log operazioni</span>
@@ -183,12 +317,110 @@
         </div>
         <div id="log-panel" class="log-panel"></div>
       </div>
-
     </section>
 
     <!-- ── CARD RISULTATO ───────────────────────────────────────── -->
     <section id="result-card" class="card hidden">
       <div id="result-content"></div>
+
+      <!-- Post-elaborazione (appare per PDF singolo) -->
+      <div id="postproc-section" class="hidden">
+        <div class="divider" style="margin:0 -40px"></div>
+        <div class="postproc-bar">
+          <span class="postproc-bar-label">Elaborazione ulteriore</span>
+          <div class="postproc-btns">
+            <button class="btn-postproc" onclick="showPostProc('compress')">🗜 Comprimi</button>
+            <button class="btn-postproc" onclick="showPostProc('split-size')">✂ Dividi per dim</button>
+            <button class="btn-postproc" onclick="showPostProc('split-ranges')">📋 Dividi per range</button>
+            <button class="btn-postproc" onclick="showPostProc('compress+split')">🗜✂ Comprimi + Dividi</button>
+          </div>
+        </div>
+        <!-- Pannello inline per le opzioni -->
+        <div id="postproc-inline" class="hidden">
+          <div class="postproc-inline-opts">
+            <!-- compress opts -->
+            <div id="ppopt-compress" class="hidden">
+              <label class="option-label">Qualità immagini</label>
+              <div class="radio-group">
+                <label class="radio-line"><input type="radio" name="pp-quality" value="screen"/>
+                  <span>Screen — 72 DPI (massimo risparmio)</span></label>
+                <label class="radio-line"><input type="radio" name="pp-quality" value="ebook" checked/>
+                  <span>Ebook — 150 DPI (bilanciato) <em class="badge-rec">consigliato</em></span></label>
+                <label class="radio-line"><input type="radio" name="pp-quality" value="printer"/>
+                  <span>Printer — 300 DPI (alta qualità)</span></label>
+              </div>
+            </div>
+            <!-- split-size opts -->
+            <div id="ppopt-split-size" class="hidden">
+              <label class="option-label">Dimensione massima per parte</label>
+              <div class="radio-group">
+                <label class="radio-line"><input type="radio" name="pp-split-mb" value="15"/> <span>15 MB</span></label>
+                <label class="radio-line"><input type="radio" name="pp-split-mb" value="30"/> <span>30 MB</span></label>
+                <label class="radio-line"><input type="radio" name="pp-split-mb" value="50" checked/>
+                  <span>50 MB <em class="badge-rec">consigliato</em></span></label>
+                <label class="radio-line">
+                  <input type="radio" name="pp-split-mb" value="custom"/>
+                  <span>Personalizzata:
+                    <input type="number" id="pp-custom-mb" value="50" min="1" max="999"
+                           class="inline-num" onclick="this.previousElementSibling.previousElementSibling.checked=true"/> MB
+                  </span>
+                </label>
+              </div>
+              <label class="option-label" style="margin-top:8px">Rinomina i file suddivisi</label>
+              <div class="radio-group">
+                <label class="radio-line">
+                  <input type="radio" name="pp-naming-ss" value="x_of_y" checked/>
+                  <span>Parte X di Y</span>
+                </label>
+                <label class="radio-line">
+                  <input type="radio" name="pp-naming-ss" value="x"/>
+                  <span>Parte X</span>
+                </label>
+                <label class="radio-line">
+                  <input type="radio" name="pp-naming-ss" value="custom"/>
+                  <span>Personalizzata:&nbsp;
+                    <input type="text" id="pp-custom-naming-ss" class="naming-input" placeholder="es. Fascicolo"
+                           oninput="document.querySelector('input[name=pp-naming-ss][value=custom]').checked=true"
+                           onclick="document.querySelector('input[name=pp-naming-ss][value=custom]').checked=true"/>
+                  </span>
+                </label>
+              </div>
+            </div>
+            <!-- split-ranges opts -->
+            <div id="ppopt-split-ranges" class="hidden">
+              <label class="option-label">Range di pagine
+                <span id="pp-range-total-label" class="option-label-note"></span>
+              </label>
+              <div id="pp-ranges-list"></div>
+              <button class="btn-add-range" onclick="addPpRangeRow()">+ Aggiungi parte</button>
+              <label class="option-label" style="margin-top:8px">Rinomina i file suddivisi</label>
+              <div class="radio-group">
+                <label class="radio-line">
+                  <input type="radio" name="pp-naming-sr" value="x_of_y" checked/>
+                  <span>Parte X di Y</span>
+                </label>
+                <label class="radio-line">
+                  <input type="radio" name="pp-naming-sr" value="x"/>
+                  <span>Parte X</span>
+                </label>
+                <label class="radio-line">
+                  <input type="radio" name="pp-naming-sr" value="custom"/>
+                  <span>Personalizzata:&nbsp;
+                    <input type="text" id="pp-custom-naming-sr" class="naming-input" placeholder="es. Sezione"
+                           oninput="document.querySelector('input[name=pp-naming-sr][value=custom]').checked=true"
+                           onclick="document.querySelector('input[name=pp-naming-sr][value=custom]').checked=true"/>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <button id="btn-apply-postproc" class="btn-primary" style="margin-top:16px" onclick="applyPostProc()">
+            Applica
+          </button>
+          <div id="postproc-result" class="hidden" style="margin-top:12px"></div>
+        </div>
+      </div>
+
       <div id="result-log-section"></div>
       <button class="btn-primary" onclick="resetApp()" style="margin-top:24px">
         Nuova elaborazione

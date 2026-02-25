@@ -81,6 +81,20 @@ body {
   color: #A8E6C2;
 }
 
+.logo-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.logo-sub {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: .65;
+  letter-spacing: .1px;
+  color: #fff;
+}
+
 /* ── Info sistema (header destra) ─────────────────────────── */
 
 .sysinfo {
@@ -975,4 +989,361 @@ body {
 .parts-list::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
+}
+
+/* ── LOGO SVG ─────────────────────────────────────────────── */
+
+.logo-svg {
+  flex-shrink: 0;
+}
+
+/* ── PDF OPS GRID ─────────────────────────────────────────── */
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.op-card-label {
+  cursor: pointer;
+}
+
+.op-card-label input[type="radio"] {
+  display: none;
+}
+
+.op-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 14px 12px;
+  background: #fff;
+  transition: border-color .15s, background .15s;
+}
+
+.op-card:hover {
+  border-color: var(--accent-light);
+  background: var(--accent-bg);
+}
+
+.op-card-label input[type="radio"]:checked + .op-card {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.op-card strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.op-card span {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.op-card-ico {
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+/* ── PDF OP SUB-OPTIONS ───────────────────────────────────── */
+
+.op-sub-opts {
+  margin-top: 14px;
+  padding: 16px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── RADIO GROUP ──────────────────────────────────────────── */
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.radio-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.radio-line input[type="radio"] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* ── BADGE CONSIGLIATO ────────────────────────────────────── */
+
+.badge-rec {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  font-style: normal;
+  padding: 1px 7px;
+  border-radius: 20px;
+  background: var(--accent);
+  color: #fff;
+  vertical-align: middle;
+  margin-left: 4px;
+  letter-spacing: .2px;
+}
+
+/* ── INLINE NUMBER INPUT ──────────────────────────────────── */
+
+.inline-num {
+  width: 60px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text);
+  background: #fff;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.inline-num::-webkit-outer-spin-button,
+.inline-num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+/* ── OPTION LABEL NOTE ────────────────────────────────────── */
+
+.option-label-note {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 6px;
+}
+
+/* ── RANGE ROWS ───────────────────────────────────────────── */
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.range-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  min-width: 52px;
+  flex-shrink: 0;
+}
+
+.range-from,
+.range-to {
+  width: 64px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text);
+  background: #fff;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.range-from::-webkit-outer-spin-button,
+.range-from::-webkit-inner-spin-button,
+.range-to::-webkit-outer-spin-button,
+.range-to::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+.range-from:focus,
+.range-to:focus {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 1px;
+}
+
+.range-sep {
+  font-size: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.btn-range-remove {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background .12s, color .12s, border-color .12s;
+  padding: 0;
+  line-height: 1;
+}
+
+.btn-range-remove:hover {
+  background: #fdf0ef;
+  color: var(--danger);
+  border-color: #e0c5c3;
+}
+
+.btn-add-range {
+  margin-top: 4px;
+  padding: 6px 12px;
+  border: 1px dashed var(--accent-border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  align-self: flex-start;
+}
+
+.btn-add-range:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+/* ── POST-PROC BAR ────────────────────────────────────────── */
+
+.postproc-bar {
+  padding: 16px 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.postproc-bar-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.postproc-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn-postproc {
+  padding: 8px 14px;
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--accent);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  white-space: nowrap;
+}
+
+.btn-postproc:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+/* ── POST-PROC INLINE OPTS ────────────────────────────────── */
+
+.postproc-inline-opts {
+  padding: 16px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 10px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── POST-PROC RESULT BOX ─────────────────────────────────── */
+
+.postproc-result-box {
+  padding: 12px 16px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.postproc-result-box.error {
+  background: var(--warn-bg);
+  border-color: #F0C4A8;
+  color: var(--warn);
+}
+
+.postproc-compress-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  margin-bottom: 8px;
+}
+
+/* ── NAMING OPTS ──────────────────────────────────────────── */
+
+.naming-eg {
+  font-size: 11px;
+  font-style: normal;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+.naming-input {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-family: var(--font);
+  font-size: 12px;
+  color: var(--text);
+  background: #fff;
+  width: 140px;
+  vertical-align: middle;
+}
+
+.naming-input:focus {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 1px;
+}
+
+/* ── RESPONSIVE (aggiornato) ──────────────────────────────── */
+
+@media (max-width: 600px) {
+  .ops-grid { grid-template-columns: 1fr; }
+  .postproc-btns { flex-direction: column; }
 }
