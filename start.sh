@@ -31,11 +31,11 @@ if [ ! -f "$SCRIPT_DIR/.venv/bin/python3" ] && [ ! -f ".deps_installed" ]; then
     echo ""
 fi
 
-# Genera l'icona (solo al primo avvio)
-if [ ! -f "icon.png" ]; then
-    echo " Generazione icona..."
+# Genera icona e .app macOS (solo se non esistono)
+if [ ! -f "icon.png" ] || [ ! -d "Split PDF 50.app" ]; then
+    echo " Generazione icona e app macOS..."
     "$PYTHON" genera_icona.py
-    chmod +x "Split PDF 50.app/Contents/MacOS/splitpdf50" 2>/dev/null || true
+    chmod +x "Split PDF 50.app/Contents/MacOS/applet" 2>/dev/null || true
 fi
 
 # Avvia il server

@@ -145,11 +145,170 @@ $Shortcut.Save()
         print(f'  [collegamento] Errore: {e}')
 
 
+def create_macos_app(png_path: str):
+    """
+    Crea (o ricrea) il bundle "Split PDF 50.app" nella cartella del progetto.
+    Compila lo script AppleScript con osacompile e imposta l'icona ICNS.
+    Solo macOS.
+    """
+    import sys, os, subprocess, shutil, tempfile
+
+    if sys.platform != 'darwin':
+        return
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    app_path  = os.path.join(base_dir, 'Split PDF 50.app')
+
+    # ── Scrivi lo script AppleScript ──────────────────────────────
+    applescript = '''\
+property serverURL : "http://localhost:5000"
+property pidFile   : "/tmp/pdf50_server.pid"
+property logFile   : "/tmp/pdf50_server.log"
+
+on run
+  launchServer()
+end run
+
+on launchServer()
+  set appBundlePath to POSIX path of (path to me)
+  if appBundlePath ends with "/" then
+    set appBundlePath to text 1 thru -2 of appBundlePath
+  end if
+  set appDir to do shell script "dirname " & quoted form of appBundlePath
+  set pythonPath to appDir & "/.venv/bin/python"
+
+  set serverRunning to false
+  try
+    do shell script "curl -sf --connect-timeout 1 " & serverURL & "/api/system-info > /dev/null 2>&1"
+    set serverRunning to true
+  on error
+  end try
+
+  if not serverRunning then
+    do shell script "cd " & quoted form of appDir & " && nohup " & quoted form of pythonPath & " app.py >> " & logFile & " 2>&1 & echo $! > " & pidFile
+    set attempts to 0
+    repeat
+      delay 1
+      set attempts to attempts + 1
+      try
+        do shell script "curl -sf --connect-timeout 1 " & serverURL & "/api/system-info > /dev/null 2>&1"
+        exit repeat
+      on error
+        if attempts >= 15 then
+          display alert "Split PDF 50" message "Il server non risponde." & return & "Log: " & logFile as critical
+          quit
+          return
+        end if
+      end try
+    end repeat
+    display notification "Split PDF 50 è pronto su localhost:5000" with title "Split PDF 50"
+  end if
+
+  open location serverURL
+end launchServer
+
+on idle
+  set serverRunning to false
+  try
+    do shell script "curl -sf --connect-timeout 2 " & serverURL & "/api/system-info > /dev/null 2>&1"
+    set serverRunning to true
+  on error
+  end try
+  if not serverRunning then
+    try
+      set appBundlePath to POSIX path of (path to me)
+      if appBundlePath ends with "/" then
+        set appBundlePath to text 1 thru -2 of appBundlePath
+      end if
+      set appDir to do shell script "dirname " & quoted form of appBundlePath
+      set pythonPath to appDir & "/.venv/bin/python"
+      do shell script "cd " & quoted form of appDir & " && nohup " & quoted form of pythonPath & " app.py >> " & logFile & " 2>&1 & echo $! > " & pidFile
+      display notification "Server riavviato automaticamente" with title "Split PDF 50"
+    on error
+    end try
+  end if
+  return 30
+end idle
+
+on quit
+  try
+    do shell script "if [ -f " & pidFile & " ]; then kill $(cat " & pidFile & ") 2>/dev/null || true; rm -f " & pidFile & "; fi; pkill -f 'python.*app.py' 2>/dev/null || true"
+  on error
+  end try
+  continue quit
+end quit
+'''
+
+    with tempfile.NamedTemporaryFile(suffix='.applescript', mode='w',
+                                     delete=False, encoding='utf-8') as f:
+        f.write(applescript)
+        tmp_script = f.name
+
+    try:
+        # Rimuovi bundle precedente
+        if os.path.exists(app_path):
+            shutil.rmtree(app_path)
+
+        # Compila
+        r = subprocess.run(
+            ['osacompile', '-o', app_path, tmp_script],
+            capture_output=True, text=True,
+        )
+        if r.returncode != 0:
+            print(f'  [app] Errore osacompile: {r.stderr.strip()}')
+            return
+        print(f'  App compilata: {app_path}')
+
+        # ── Crea icona ICNS ──────────────────────────────────────
+        if png_path and os.path.isfile(png_path):
+            try:
+                iconset_dir = tempfile.mkdtemp(suffix='.iconset')
+                sizes = [
+                    (16,  'icon_16x16.png'),
+                    (32,  'icon_16x16@2x.png'),
+                    (32,  'icon_32x32.png'),
+                    (64,  'icon_32x32@2x.png'),
+                    (128, 'icon_128x128.png'),
+                    (256, 'icon_128x128@2x.png'),
+                    (256, 'icon_256x256.png'),
+                    (512, 'icon_256x256@2x.png'),
+                    (512, 'icon_512x512.png'),
+                ]
+                for sz, name in sizes:
+                    subprocess.run(
+                        ['sips', '-z', str(sz), str(sz), png_path,
+                         '--out', os.path.join(iconset_dir, name)],
+                        capture_output=True,
+                    )
+                icns_path = os.path.join(base_dir, 'icon.icns')
+                subprocess.run(
+                    ['iconutil', '-c', 'icns', iconset_dir, '-o', icns_path],
+                    capture_output=True,
+                )
+                shutil.rmtree(iconset_dir, ignore_errors=True)
+
+                if os.path.isfile(icns_path):
+                    dest = os.path.join(app_path, 'Contents', 'Resources', 'applet.icns')
+                    shutil.copy2(icns_path, dest)
+                    os.remove(icns_path)
+                    # Forza refresh Finder
+                    subprocess.run(['touch', app_path], capture_output=True)
+                    print(f'  Icona applicata all\'app.')
+            except Exception as e:
+                print(f'  [app] Icona non applicata: {e}')
+
+    finally:
+        os.unlink(tmp_script)
+
+
 if __name__ == '__main__':
     print('\n  Generazione icona Split PDF 50...')
     ico, png = create_icon()
 
     if sys.platform == 'win32' and ico:
         create_windows_shortcut(ico)
+
+    if sys.platform == 'darwin':
+        create_macos_app(png)
 
     print('  Fatto.\n')

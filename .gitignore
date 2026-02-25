@@ -20,6 +20,14 @@ ENV/
 splitpdf50_*/
 *.tmp
 
+# Icone generate
+icon.ico
+icon.png
+*.icns
+
+# App macOS generata (ricreata da genera_icona.py / start.sh)
+Split PDF 50.app/
+
 # Sistema
 .DS_Store
 Thumbs.db
