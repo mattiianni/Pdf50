@@ -139,7 +139,7 @@ if [[ $DO_INSTALL -eq 1 ]]; then
   step "Installazione in $INSTALL_DIR"
   # Ferma un eventuale server in esecuzione (vecchia app o start.sh)
   curl -sf -X POST -H 'Content-Type: application/json' -d '{"force":true}' \
-       http://127.0.0.1:5000/api/shutdown >/dev/null 2>&1 || true
+       http://127.0.0.1:5055/api/shutdown >/dev/null 2>&1 || true
   pkill -f "${APP_NAME}.app/Contents/MacOS/splitpdf50" 2>/dev/null || true
   sleep 1
   DEST="$INSTALL_DIR/${APP_NAME}.app"

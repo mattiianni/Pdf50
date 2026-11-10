@@ -62,7 +62,7 @@ Opzioni: `--applications` (installa in `/Applications`), `--no-install` (solo bu
 `--skip-brew` (non tocca Homebrew).
 
 Uso dell'app:
-- doppio click → il server parte in background e si apre il browser su `http://localhost:5000`;
+- doppio click → il server parte in background e si apre il browser su `http://127.0.0.1:5055`;
 - un secondo doppio click con l'app già attiva riapre solo la pagina;
 - per chiuderla usa il pulsante **Esci** in alto a destra nella pagina;
 - log: `~/Library/Logs/SplitPDF50.log`.
@@ -90,7 +90,7 @@ chmod +x start.sh
 ```
 
 Al primo avvio vengono installate automaticamente le dipendenze Python.
-Il browser si apre su `http://localhost:5000`.
+Il browser si apre su `http://127.0.0.1:5055`.
 
 ---
 
@@ -150,4 +150,4 @@ Se risultato > 50 MB:
 - L'app gira interamente **in locale**: nessun file viene inviato a server esterni
 - I file temporanei vengono eliminati automaticamente al termine
 - In caso di file corrotti o non convertibili, vengono saltati con un avviso nel log
-- Il server è su `localhost:5000` e accetta connessioni solo locali
+- Il server è su `127.0.0.1:5055` e accetta connessioni solo locali

@@ -1,6 +1,6 @@
 """
 Split PDF 50 - Server Flask locale
-Avvia il server su http://localhost:5000
+Avvia il server su http://127.0.0.1:5055
 """
 
 import os
@@ -1045,8 +1045,8 @@ if __name__ == '__main__':
     import multiprocessing
     multiprocessing.freeze_support()
 
-    port = int(os.environ.get('SPLITPDF50_PORT', '5000'))
-    url = f'http://localhost:{port}'
+    port = int(os.environ.get('SPLITPDF50_PORT', '5055'))
+    url = f'http://127.0.0.1:{port}'
     no_browser = '--no-browser' in sys.argv
 
     # Secondo click sull'icona con il server già attivo: apri solo il browser
