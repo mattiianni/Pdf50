@@ -106,6 +106,45 @@ elif sys.platform == 'win32':
         if _missing:
             os.environ['PATH'] = ';'.join(_missing) + (';' + _current if _current else '')
 
+# ── Strumenti inclusi nell'app (Tesseract + Ghostscript) ───────────────────────
+# La build macOS copia tesseract, gs e le loro librerie in
+# "Split PDF 50.app/Contents/Resources/tools". Se ci sono, li usiamo da lì:
+# l'utente non deve installare nulla con Homebrew.
+BUNDLED_TOOLS = False
+TOOLS_DIR = None
+
+
+def _setup_bundled_tools():
+    global BUNDLED_TOOLS, TOOLS_DIR
+    if not (FROZEN and sys.platform == 'darwin'):
+        return
+    tools = os.path.normpath(os.path.join(
+        os.path.dirname(os.path.realpath(sys.executable)), '..', 'Resources', 'tools'))
+    bin_dir = os.path.join(tools, 'bin')
+    if not (os.path.isfile(os.path.join(bin_dir, 'tesseract'))
+            and os.path.isfile(os.path.join(bin_dir, 'gs'))):
+        return
+    TOOLS_DIR = tools
+    os.environ['PATH'] = bin_dir + ':' + os.environ.get('PATH', '')
+    tessdata = os.path.join(tools, 'share', 'tessdata')
+    if os.path.isdir(tessdata):
+        os.environ['TESSDATA_PREFIX'] = tessdata
+    # Ghostscript: cartelle di init/risorse spostate nel bundle
+    import glob as _g
+    for gs_root in sorted(_g.glob(os.path.join(tools, 'share', 'ghostscript', '*'))):
+        if os.path.isdir(os.path.join(gs_root, 'Resource', 'Init')):
+            dirs = [os.path.join(gs_root, 'Resource', 'Init'),
+                    os.path.join(gs_root, 'lib'),
+                    os.path.join(gs_root, 'Resource', 'Font'),
+                    os.path.join(gs_root, 'iccprofiles'),
+                    os.path.join(tools, 'share', 'ghostscript', 'fonts')]
+            os.environ['GS_LIB'] = ':'.join(d for d in dirs if os.path.isdir(d))
+            break
+    BUNDLED_TOOLS = True
+
+
+_setup_bundled_tools()
+
 from core import file_scanner, converter, ocr_processor, pdf_merger, pdf_splitter, pdf_extractor
 
 app = Flask(__name__, static_folder=STATIC_DIR)
@@ -989,6 +1028,7 @@ def system_info():
         'ghostscript': gs_ok,
         'platform': sys.platform,
         'frozen': bool(FROZEN),
+        'bundled_tools': bool(BUNDLED_TOOLS),
         'log_file': LOG_FILE,
     }
 

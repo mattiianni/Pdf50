@@ -151,3 +151,11 @@ Se risultato > 50 MB:
 - I file temporanei vengono eliminati automaticamente al termine
 - In caso di file corrotti o non convertibili, vengono saltati con un avviso nel log
 - Il server è su `127.0.0.1:5055` e accetta connessioni solo locali
+
+### App standalone: nessuna installazione di Tesseract/Ghostscript
+
+La build macOS (`build_macos.sh`, o il workflow GitHub Actions) copia Tesseract
+(italiano, inglese, osd) e Ghostscript con tutte le loro librerie dentro
+`Split PDF 50.app/Contents/Resources/tools`. L'app li usa da lì e non mostra
+più l'avviso "dipendenze mancanti" per questi due programmi. Sul Mac che usa
+l'app non serve Homebrew. Per saltare questo passo: `./build_macos.sh --no-bundle`.

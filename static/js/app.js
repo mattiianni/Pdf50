@@ -93,7 +93,8 @@ function renderDepsWarning(info) {
     });
   }
 
-  if (!info.tesseract_italian) {
+  // Nell'app standalone Tesseract e Ghostscript sono già inclusi: nessun avviso.
+  if (!info.tesseract_italian && !info.bundled_tools) {
     required.push({
       name: 'Tesseract + Lingua Italiana',
       desc: 'Necessario per applicare l\'OCR in italiano.',
@@ -107,7 +108,7 @@ function renderDepsWarning(info) {
     });
   }
 
-  if (!info.ghostscript) {
+  if (!info.ghostscript && !info.bundled_tools) {
     required.push({
       name: 'Ghostscript',
       desc: 'Richiesto da ocrmypdf e per la compressione PDF.',

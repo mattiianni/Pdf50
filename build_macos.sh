@@ -5,7 +5,8 @@
 #   ./build_macos.sh               build + installa sul Desktop
 #   ./build_macos.sh --applications  build + installa in /Applications
 #   ./build_macos.sh --no-install  solo build (risultato in dist/)
-#   ./build_macos.sh --skip-brew   non controlla/installa i tool Homebrew
+#   ./build_macos.sh --skip-brew   non controlla/installa i tool Homebrew (passo 2)
+#   ./build_macos.sh --no-bundle   non incorpora Tesseract/Ghostscript nell'app
 #
 # Cosa fa:
 #   1. verifica di essere su macOS arm64 con un Python 3.10+ nativo arm64
@@ -14,6 +15,8 @@
 #   3. crea/aggiorna il virtualenv .venv-build e installa requirements + PyInstaller
 #   4. genera l'icona .icns (1024 px) con Pillow + sips + iconutil
 #   5. esegue PyInstaller con SplitPDF50.spec → dist/Split PDF 50.app
+#   5b. incorpora Tesseract (ita/eng/osd) + Ghostscript con le loro librerie
+#      in Contents/Resources/tools: l'app non richiede più Homebrew
 #   6. firma ad-hoc, rimuove la quarantena e copia l'app sul Desktop
 #      (sostituendo la versione precedente, dopo aver fermato il server attivo)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -29,11 +32,13 @@ VENV="$SCRIPT_DIR/.venv-build"
 INSTALL_DIR="$HOME/Desktop"
 DO_INSTALL=1
 DO_BREW=1
+DO_BUNDLE=1
 for arg in "$@"; do
   case "$arg" in
     --applications) INSTALL_DIR="/Applications" ;;
     --no-install)   DO_INSTALL=0 ;;
     --skip-brew)    DO_BREW=0 ;;
+    --no-bundle)    DO_BUNDLE=0 ;;
     -h|--help)      sed -n 2,20p "$0"; exit 0 ;;
     *) echo "Opzione sconosciuta: $arg"; exit 2 ;;
   esac
@@ -128,6 +133,72 @@ rm -rf "dist/${APP_NAME}.app" dist/splitpdf50
 
 [[ -d "$APP_BUNDLE" ]] || die "Build fallita: $APP_BUNDLE non creato."
 echo "  Architettura: $(lipo -archs "$APP_BUNDLE/Contents/MacOS/splitpdf50")"
+
+# ── 5b. Incorpora Tesseract + Ghostscript nell'app ───────────────────────────
+if [[ $DO_BUNDLE -eq 1 ]]; then
+  step "Incorporo Tesseract + Ghostscript nell'app"
+  command -v brew >/dev/null 2>&1 || die "Homebrew serve solo per COPIARE tesseract/ghostscript nell'app (o usa --no-bundle)."
+  export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1
+  need=()
+  for pkg in tesseract ghostscript dylibbundler; do
+    brew list --formula "$pkg" >/dev/null 2>&1 || need+=("$pkg")
+  done
+  if [[ ${#need[@]} -gt 0 ]]; then echo "  Installo: ${need[*]}"; brew install "${need[@]}"; fi
+
+  TOOLS="$SCRIPT_DIR/$APP_BUNDLE/Contents/Resources/tools"
+  TESS_PREFIX="$(brew --prefix tesseract)"
+  GS_PREFIX="$(brew --prefix ghostscript)"
+  rm -rf "$TOOLS"; mkdir -p "$TOOLS/bin" "$TOOLS/lib" "$TOOLS/share/tessdata"
+
+  cp -L "$TESS_PREFIX/bin/tesseract" "$TOOLS/bin/tesseract"
+  cp -L "$GS_PREFIX/bin/gs"          "$TOOLS/bin/gs"
+  chmod u+w "$TOOLS/bin/"*
+
+  # Copia le librerie dinamiche (e ne corregge i percorsi) accanto ai binari
+  dylibbundler -of -od -b -cd \
+    -x "$TOOLS/bin/tesseract" -x "$TOOLS/bin/gs" \
+    -d "$TOOLS/lib" -p "@executable_path/../lib" >/dev/null
+
+  # Dati Tesseract: configs, pdf.ttf, eng, osd + italiano (tessdata_fast)
+  ditto "$TESS_PREFIX/share/tessdata" "$TOOLS/share/tessdata"
+  for lang in ita eng osd; do
+    if [[ ! -s "$TOOLS/share/tessdata/$lang.traineddata" ]]; then
+      curl -fsSL --retry 5 --retry-delay 3 -o "$TOOLS/share/tessdata/$lang.traineddata" \
+        "https://github.com/tesseract-ocr/tessdata_fast/raw/main/$lang.traineddata"
+    fi
+  done
+
+  # Risorse Ghostscript (init, font, profili ICC), senza documentazione
+  mkdir -p "$TOOLS/share"
+  ditto "$GS_PREFIX/share/ghostscript" "$TOOLS/share/ghostscript"
+  rm -rf "$TOOLS"/share/ghostscript/*/doc "$TOOLS"/share/ghostscript/*/examples
+
+  # Firma ad-hoc di ogni eseguibile/libreria (obbligatorio su arm64 dopo install_name_tool)
+  while IFS= read -r -d '' f; do
+    if file "$f" | grep -q "Mach-O"; then codesign --force --sign - "$f" >/dev/null 2>&1; fi
+  done < <(find "$TOOLS" -type f -print0)
+
+  # ── Verifiche: nessun riferimento a Homebrew + prova reale con ambiente pulito
+  bad="$(find "$TOOLS" -type f -print0 | xargs -0 file | grep Mach-O | cut -d: -f1 \
+        | while read -r f; do otool -L "$f" | tail -n +2; done \
+        | grep -E '/opt/homebrew|/usr/local/(opt|Cellar|lib)|/opt/local' || true)"
+  if [[ -n "$bad" ]]; then echo "$bad"; die "Ci sono ancora riferimenti a Homebrew nelle librerie incorporate."; fi
+
+  GS_ROOT="$(ls -d "$TOOLS"/share/ghostscript/*/ | head -1)"; GS_ROOT="${GS_ROOT%/}"
+  GSLIB="$GS_ROOT/Resource/Init:$GS_ROOT/lib:$GS_ROOT/Resource/Font:$GS_ROOT/iccprofiles:$TOOLS/share/ghostscript/fonts"
+  CLEAN=(env -i PATH=/usr/bin:/bin HOME="$HOME" TESSDATA_PREFIX="$TOOLS/share/tessdata" GS_LIB="$GSLIB")
+  mkdir -p build/toolcheck
+  "${CLEAN[@]}" "$TOOLS/bin/gs" -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=pdfwrite \
+      -sOutputFile=build/toolcheck/t.pdf -c "/Helvetica findfont 48 scalefont setfont 40 100 moveto (Ciao mondo) show showpage" \
+      || die "Ghostscript incorporato non funziona."
+  "${CLEAN[@]}" "$TOOLS/bin/gs" -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=png16m -r200 \
+      -sOutputFile=build/toolcheck/t.png build/toolcheck/t.pdf || die "Ghostscript: render PNG fallito."
+  langs="$("${CLEAN[@]}" "$TOOLS/bin/tesseract" --list-langs 2>&1)"
+  echo "$langs" | grep -qx ita || { echo "$langs"; die "Tesseract incorporato: lingua italiana mancante."; }
+  ocr="$("${CLEAN[@]}" "$TOOLS/bin/tesseract" build/toolcheck/t.png stdout -l ita 2>&1 || true)"
+  echo "$ocr" | grep -qi "ciao" || { echo "$ocr"; die "Prova OCR fallita (testo 'Ciao mondo' non riconosciuto)."; }
+  echo "  OCR + Ghostscript incorporati: OK ($(du -sh "$TOOLS" | cut -f1))"
+fi
 
 # ── 6. Firma ad-hoc + installazione ──────────────────────────────────────────
 step "Firma ad-hoc"
