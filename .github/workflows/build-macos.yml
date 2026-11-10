@@ -1,0 +1,36 @@
+# Build dell'app standalone macOS arm64 su runner GitHub Apple Silicon.
+# Avvio manuale: GitHub → Actions → "Build macOS app (arm64)" → Run workflow.
+# Si avvia anche a ogni push di un tag v* (es. v1.2.0).
+# Risultato: artifact "Split-PDF-50-macOS-arm64" con lo zip dell'app.
+name: Build macOS app (arm64)
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: macos-14          # Apple Silicon (M1)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: arm64
+
+      - name: Build
+        run: ./build_macos.sh --no-install --skip-brew
+
+      - name: Zip
+        run: |
+          cd dist
+          ditto -c -k --keepParent "Split PDF 50.app" "Split-PDF-50-macOS-arm64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Split-PDF-50-macOS-arm64
+          path: dist/Split-PDF-50-macOS-arm64.zip

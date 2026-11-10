@@ -37,7 +37,37 @@ async function loadSystemInfo() {
     const res  = await fetch('/api/system-info');
     const info = await res.json();
     renderDepsWarning(info);
+    if (info.frozen) renderQuitButton();
   } catch (e) { /* silenzioso */ }
+}
+
+// ── Pulsante "Esci" (solo app standalone: il server gira senza finestra) ─────
+function renderQuitButton() {
+  const host = document.getElementById('sysinfo');
+  if (!host || document.getElementById('quit-btn')) return;
+  const btn = document.createElement('button');
+  btn.id = 'quit-btn';
+  btn.className = 'quit-btn';
+  btn.type = 'button';
+  btn.textContent = 'Esci';
+  btn.title = 'Chiudi Split PDF 50';
+  btn.addEventListener('click', async () => {
+    const send = (force) => fetch('/api/shutdown', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ force }),
+    });
+    try {
+      let res = await send(false);
+      if (res.status === 409) {
+        if (!confirm('C\'è un\'elaborazione in corso. Chiudere comunque?')) return;
+        res = await send(true);
+      }
+    } catch (e) { /* il server si sta già chiudendo */ }
+    document.body.innerHTML =
+      '<div class="quit-screen"><h2>Split PDF 50 è stato chiuso</h2>' +
+      '<p>Puoi chiudere questa scheda. Per riaprirlo fai doppio click sull\'icona dell\'app.</p></div>';
+  });
+  host.appendChild(btn);
 }
 
 function renderDepsWarning(info) {

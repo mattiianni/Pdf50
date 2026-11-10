@@ -18,7 +18,48 @@ from collections import defaultdict
 
 from flask import Flask, request, jsonify, Response, send_from_directory
 
-sys.path.insert(0, os.path.dirname(__file__))
+# ── Modalità app standalone (PyInstaller) ───────────────────────────────────
+# FROZEN  = True quando l'app gira dal bundle "Split PDF 50.app" creato da
+#           PyInstaller (build_macos.sh). In quel caso i file statici sono
+#           estratti in sys._MEIPASS e sys.executable è il binario dell'app.
+FROZEN = getattr(sys, 'frozen', False)
+BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
+
+sys.path.insert(0, BASE_DIR)
+
+
+def _docx2pdf_worker_mode():
+    """
+    Nell'app standalone non esiste un interprete Python separato: per isolare
+    docx2pdf in un process group (vedi core/converter._try_docx2pdf) l'app
+    rilancia se stessa con `--docx2pdf-worker <input> <output>`.
+    """
+    if len(sys.argv) >= 4 and sys.argv[1] == '--docx2pdf-worker':
+        from docx2pdf import convert
+        convert(sys.argv[2], sys.argv[3])
+        sys.exit(0)
+
+
+if FROZEN:
+    _docx2pdf_worker_mode()
+
+    # Senza terminale stdout/stderr finiscono nel nulla: li ridirigiamo su file
+    # (~/Library/Logs/SplitPDF50.log su macOS) per poter diagnosticare problemi.
+    try:
+        if sys.platform == 'darwin':
+            _log_dir = os.path.expanduser('~/Library/Logs')
+        else:
+            _log_dir = os.path.expanduser('~')
+        os.makedirs(_log_dir, exist_ok=True)
+        LOG_FILE = os.path.join(_log_dir, 'SplitPDF50.log')
+        _log = open(LOG_FILE, 'a', buffering=1, encoding='utf-8')
+        sys.stdout = _log
+        sys.stderr = _log
+    except Exception:
+        LOG_FILE = None
+else:
+    LOG_FILE = None
 
 # ── Estendi il PATH con le directory di Homebrew / MacPorts / standard ────────
 # Necessario quando l'app viene avviata tramite .app bundle (AppleScript),
@@ -36,6 +77,16 @@ if sys.platform == 'darwin':
     _missing = [p for p in _extra if p not in _current.split(':')]
     if _missing:
         os.environ['PATH'] = ':'.join(_missing) + (':' + _current if _current else '')
+
+    # WeasyPrint carica pango/gobject via cffi → ctypes.util.find_library, che
+    # consulta DYLD_FALLBACK_LIBRARY_PATH letto da os.environ al momento della
+    # chiamata: aggiungendo le lib di Homebrew le trova anche da .app/Finder.
+    _libs = ['/opt/homebrew/lib', '/usr/local/lib', '/opt/local/lib']
+    _fb = os.environ.get('DYLD_FALLBACK_LIBRARY_PATH', '')
+    _fb_missing = [p for p in _libs if os.path.isdir(p) and p not in _fb.split(':')]
+    if _fb_missing:
+        os.environ['DYLD_FALLBACK_LIBRARY_PATH'] = ':'.join(
+            _fb_missing + ([_fb] if _fb else []) + ['/usr/lib'])
 
 elif sys.platform == 'win32':
     # Su Windows aggiunge i percorsi comuni di Ghostscript al PATH
@@ -57,7 +108,7 @@ elif sys.platform == 'win32':
 
 from core import file_scanner, converter, ocr_processor, pdf_merger, pdf_splitter, pdf_extractor
 
-app = Flask(__name__, static_folder='static')
+app = Flask(__name__, static_folder=STATIC_DIR)
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024 * 1024   # 10 GB max upload
 
 # Storage in-memory dei job
@@ -567,11 +618,11 @@ def _run_per_folder(job_id: str, source_path: str, output_path: str):
 
 @app.route('/')
 def index():
-    return send_from_directory('static', 'index.html')
+    return send_from_directory(STATIC_DIR, 'index.html')
 
 @app.route('/static/<path:filename>')
 def static_files(filename):
-    return send_from_directory('static', filename)
+    return send_from_directory(STATIC_DIR, filename)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -937,6 +988,8 @@ def system_info():
         'tesseract_italian': ita_ok,
         'ghostscript': gs_ok,
         'platform': sys.platform,
+        'frozen': bool(FROZEN),
+        'log_file': LOG_FILE,
     }
 
     try:
@@ -952,9 +1005,56 @@ def system_info():
 # Avvio
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Route: chiusura server (usata dal pulsante "Esci" nell'app standalone)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/shutdown', methods=['POST'])
+def shutdown():
+    with jobs_lock:
+        running = [j for j in jobs.values()
+                   if j.get('status') == 'running' and not j.get('cancelled')]
+    if running and not (request.get_json(silent=True) or {}).get('force'):
+        return jsonify({'ok': False, 'running': len(running)}), 409
+
+    def _bye():
+        time.sleep(0.5)
+        os._exit(0)
+
+    threading.Thread(target=_bye, daemon=True).start()
+    return jsonify({'ok': True})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Avvio
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _server_already_running(port: int) -> bool:
+    """True se un'istanza di Split PDF 50 risponde già su localhost:port."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(
+                f'http://127.0.0.1:{port}/api/system-info', timeout=1) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
 if __name__ == '__main__':
-    port = 5000
+    # Necessario per multiprocessing nell'app standalone (PyInstaller)
+    import multiprocessing
+    multiprocessing.freeze_support()
+
+    port = int(os.environ.get('SPLITPDF50_PORT', '5000'))
     url = f'http://localhost:{port}'
+    no_browser = '--no-browser' in sys.argv
+
+    # Secondo click sull'icona con il server già attivo: apri solo il browser
+    if _server_already_running(port):
+        print(f'  Split PDF 50 già in esecuzione su {url}')
+        if not no_browser:
+            webbrowser.open(url)
+        sys.exit(0)
 
     print(f'\n  Split PDF 50')
     print(f'  ─────────────────────────')
@@ -965,5 +1065,6 @@ if __name__ == '__main__':
         time.sleep(1.5)
         webbrowser.open(url)
 
-    threading.Thread(target=open_browser, daemon=True).start()
+    if not no_browser:
+        threading.Thread(target=open_browser, daemon=True).start()
     app.run(host='127.0.0.1', port=port, debug=False, threaded=True)

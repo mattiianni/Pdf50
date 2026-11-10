@@ -22,57 +22,74 @@ def create_icon():
         return None, None
 
     SIZES = [16, 32, 48, 64, 128, 256]
-    BG_COLOR    = (27, 107, 69)       # Verde scuro
-    TEXT_COLOR  = (168, 230, 194)     # Verde chiaro
-
     images = []
 
     for size in SIZES:
-        img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
+        images.append(_draw_icon(size))
 
-        # Sfondo arrotondato
-        radius = max(2, size // 6)
-        draw.rounded_rectangle([0, 0, size - 1, size - 1],
-                                radius=radius, fill=BG_COLOR)
+    return _save_icons(images, SIZES)
 
-        # Numero "50" centrato
-        font_size = max(6, int(size * 0.4))
-        font = None
 
-        # Prova font di sistema
-        font_candidates = [
-            'arialbd.ttf', 'Arial Bold.ttf', 'arial.ttf',
-            '/System/Library/Fonts/Helvetica.ttc',
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-        ]
-        for fc in font_candidates:
-            try:
-                font = ImageFont.truetype(fc, font_size)
-                break
-            except Exception:
-                continue
+def _draw_icon(size: int):
+    """Disegna l'icona (quadrato verde arrotondato con "50") al lato `size`."""
+    from PIL import Image, ImageDraw, ImageFont
 
-        if font is None:
-            try:
-                font = ImageFont.load_default()
-            except Exception:
-                pass
+    BG_COLOR    = (27, 107, 69)       # Verde scuro
+    TEXT_COLOR  = (168, 230, 194)     # Verde chiaro
 
-        text = '50'
-        if font:
-            try:
-                bbox = draw.textbbox((0, 0), text, font=font)
-                tw = bbox[2] - bbox[0]
-                th = bbox[3] - bbox[1]
-                x = (size - tw) // 2 - bbox[0]
-                y = (size - th) // 2 - bbox[1]
-                draw.text((x, y), text, fill=TEXT_COLOR, font=font)
-            except Exception:
-                pass
+    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
 
-        images.append(img)
+    # Sfondo arrotondato
+    radius = max(2, size // 6)
+    draw.rounded_rectangle([0, 0, size - 1, size - 1],
+                            radius=radius, fill=BG_COLOR)
 
+    # Numero "50" centrato
+    font_size = max(6, int(size * 0.4))
+    font = None
+
+    # Prova font di sistema
+    font_candidates = [
+        'arialbd.ttf', 'Arial Bold.ttf', 'arial.ttf',
+        '/System/Library/Fonts/Helvetica.ttc',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    ]
+    for fc in font_candidates:
+        try:
+            font = ImageFont.truetype(fc, font_size)
+            break
+        except Exception:
+            continue
+
+    if font is None:
+        try:
+            font = ImageFont.load_default()
+        except Exception:
+            pass
+
+    text = '50'
+    if font:
+        try:
+            bbox = draw.textbbox((0, 0), text, font=font)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            x = (size - tw) // 2 - bbox[0]
+            y = (size - th) // 2 - bbox[1]
+            draw.text((x, y), text, fill=TEXT_COLOR, font=font)
+        except Exception:
+            pass
+
+    return img
+
+
+def create_hires_png(path: str, size: int = 1024) -> str:
+    """PNG ad alta risoluzione per l'icona .icns dell'app standalone macOS."""
+    _draw_icon(size).save(path, format='PNG')
+    return path
+
+
+def _save_icons(images, SIZES):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     ico_path = os.path.join(base_dir, 'icon.ico')
     png_path = os.path.join(base_dir, 'icon.png')

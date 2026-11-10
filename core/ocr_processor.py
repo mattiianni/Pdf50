@@ -180,6 +180,10 @@ def apply_ocr(input_pdf: str, output_pdf: str, language: str = 'ita') -> bool:
             invalidate_digital_signatures=True,
             jobs=os.cpu_count() or 2,  # parallelizza su tutti i core disponibili
             tesseract_timeout=60,    # max 60s per pagina, poi la salta
+            # Nell'app standalone (PyInstaller) usiamo thread invece di
+            # processi: il lavoro pesante lo fa comunque Tesseract (processo
+            # esterno), e si evitano i problemi di multiprocessing "spawn".
+            use_threads=bool(getattr(sys, 'frozen', False)),
         )
 
         if os.path.isfile(output_pdf) and os.path.getsize(output_pdf) > 0:

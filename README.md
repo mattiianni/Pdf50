@@ -41,7 +41,42 @@ brew install ghostscript
 
 ---
 
-## Installazione e avvio
+## App standalone macOS (Apple Silicon) — consigliato
+
+Crea `Split PDF 50.app`, un'app nativa **arm64** con Python e tutte le librerie
+incluse: si avvia con un doppio click, senza terminale né virtualenv.
+
+```bash
+./build_macos.sh
+```
+
+Lo script (`build_macos.sh`):
+1. verifica macOS arm64 e trova un Python 3.10+ nativo arm64 (`brew install python@3.13` se manca);
+2. installa via Homebrew, se mancano, `tesseract`, `tesseract-lang`, `ghostscript`, `pango`;
+3. crea `.venv-build/`, installa `requirements.txt` + PyInstaller;
+4. genera l'icona `.icns` a 1024 px;
+5. esegue PyInstaller con `SplitPDF50.spec` → `dist/Split PDF 50.app`;
+6. firma ad-hoc, ferma l'eventuale server attivo e **sostituisce l'app sul Desktop**.
+
+Opzioni: `--applications` (installa in `/Applications`), `--no-install` (solo build),
+`--skip-brew` (non tocca Homebrew).
+
+Uso dell'app:
+- doppio click → il server parte in background e si apre il browser su `http://localhost:5000`;
+- un secondo doppio click con l'app già attiva riapre solo la pagina;
+- per chiuderla usa il pulsante **Esci** in alto a destra nella pagina;
+- log: `~/Library/Logs/SplitPDF50.log`.
+
+Tesseract, Ghostscript, pango e LibreOffice restano programmi di sistema (Homebrew):
+l'app li trova in `/opt/homebrew` anche se lanciata dal Finder.
+
+In alternativa la build può girare su GitHub: **Actions → Build macOS app (arm64) → Run workflow**
+scarica lo zip dall'artifact. Essendo firmata solo ad-hoc, al primo avvio serve
+click destro → **Apri** (oppure `xattr -dr com.apple.quarantine "Split PDF 50.app"`).
+
+---
+
+## Installazione e avvio (da sorgenti)
 
 ### Windows
 ```

@@ -95,6 +95,29 @@ body {
   color: #fff;
 }
 
+/* ── Pulsante Esci (app standalone) ──────────────────────── */
+
+.quit-btn {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 6px;
+  padding: 5px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.quit-btn:hover { background: rgba(255,255,255,0.28); }
+
+.quit-screen {
+  max-width: 520px;
+  margin: 120px auto;
+  padding: 0 24px;
+  text-align: center;
+}
+.quit-screen p { opacity: .7; }
+
 /* ── Info sistema (header destra) ─────────────────────────── */
 
 .sysinfo {

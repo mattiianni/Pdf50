@@ -10,6 +10,7 @@ dist/
 build/
 .eggs/
 .venv/
+.venv-build/
 venv/
 ENV/
 
@@ -19,6 +20,9 @@ ENV/
 # Dati temporanei
 splitpdf50_*/
 *.tmp
+
+# Build PyInstaller (build_macos.sh) → build/ e dist/ sono già esclusi sopra
+*.iconset/
 
 # Icone generate
 icon.ico

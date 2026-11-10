@@ -291,10 +291,16 @@ def _try_docx2pdf(file_path: str, output_dir: str) -> tuple:
                 return None, 'docx2pdf non disponibile'
 
             import os as _os, signal as _signal
+            if getattr(sys, 'frozen', False):
+                # App standalone: sys.executable è il binario dell'app, che
+                # riconosce la modalità worker (vedi app._docx2pdf_worker_mode)
+                cmd = [sys.executable, '--docx2pdf-worker', trusted_copy, dest]
+            else:
+                cmd = [sys.executable, '-c',
+                       'import sys; from docx2pdf import convert; convert(sys.argv[1], sys.argv[2])',
+                       trusted_copy, dest]
             proc = subprocess.Popen(
-                [sys.executable, '-c',
-                 'import sys; from docx2pdf import convert; convert(sys.argv[1], sys.argv[2])',
-                 trusted_copy, dest],
+                cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 preexec_fn=_os.setsid,   # nuovo process group
