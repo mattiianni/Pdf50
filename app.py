@@ -767,6 +767,12 @@ def upload_file():
 # Route: post-elaborazione PDF (compress / split-size / split-ranges)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Job di compressione: Ghostscript può impiegare molti minuti su PDF grandi,
+# quindi gira in un thread e il frontend interroga lo stato (pagina X di N).
+compress_jobs = {}
+compress_lock = threading.Lock()
+
+
 @app.route('/api/post/compress', methods=['POST'])
 def post_compress():
     from core import pdf_compressor
@@ -785,11 +791,120 @@ def post_compress():
     base = os.path.splitext(os.path.basename(pdf_path))[0]
     out  = os.path.join(output_dir, f'{base}_compresso.pdf')
 
-    result = pdf_compressor.compress_pdf(pdf_path, out, quality)
-    if result['ok']:
-        result['output_path'] = out
-        result['filename']    = os.path.basename(out)
-    return jsonify(result)
+    job_id = uuid.uuid4().hex
+    job = {
+        'status': 'running', 'page': 0, 'total': 0,
+        'started': time.time(), 'cancelled': False,
+        'log': [], 'result': None, 'last_logged_pct': -1,
+        'samples': [],   # (istante, pagina) per stimare la velocità recente
+    }
+    with compress_lock:
+        compress_jobs[job_id] = job
+
+    def log(level, msg):
+        with compress_lock:
+            job['log'].append({'level': level, 'message': msg,
+                               'ts': datetime.now().strftime('%H:%M:%S')})
+        print(f'  [compress {job_id[:6]}] {msg}')
+
+    def progress(page, total):
+        now = time.time()
+        with compress_lock:
+            job['page'] = page
+            job['total'] = total
+            job['samples'].append((now, page))
+            # tiene solo gli ultimi 60 secondi
+            while len(job['samples']) > 2 and now - job['samples'][0][0] > 60:
+                job['samples'].pop(0)
+        # Nel log una riga ogni 10% (la barra si aggiorna a ogni pagina)
+        if total:
+            pct = int(page * 100 / total) // 10 * 10
+            if pct > 0 and pct > job['last_logged_pct']:
+                job['last_logged_pct'] = pct
+                elapsed = time.time() - job['started']
+                log('info', f'Pagina {page} di {total} ({pct}%) — '
+                            f'{_fmt_duration(elapsed)} trascorsi')
+
+    def run():
+        log('info', f'Compressione di "{os.path.basename(pdf_path)}"')
+        result = pdf_compressor.compress_pdf(
+            pdf_path, out, quality,
+            progress_cb=progress,
+            cancel_check=lambda: job['cancelled'],
+            log_cb=log,
+        )
+        elapsed = _fmt_duration(time.time() - job['started'])
+        if result['ok']:
+            result['output_path'] = out
+            result['filename']    = os.path.basename(out)
+            log('success', f'Completato in {elapsed}: {result["orig_mb"]} MB → '
+                           f'{result["size_mb"]} MB (−{result["reduction_pct"]}%)')
+        elif result.get('cancelled'):
+            log('warning', f'Compressione annullata dopo {elapsed}')
+        else:
+            log('error', f'Errore: {result.get("error")}')
+        with compress_lock:
+            job['result'] = result
+            job['status'] = ('done' if result['ok'] else
+                             'cancelled' if result.get('cancelled') else 'error')
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({'ok': True, 'job_id': job_id})
+
+
+def _fmt_duration(sec: float) -> str:
+    sec = int(sec)
+    if sec < 60:
+        return f'{sec}s'
+    m, s = divmod(sec, 60)
+    if m < 60:
+        return f'{m}m {s:02d}s'
+    h, m = divmod(m, 60)
+    return f'{h}h {m:02d}m'
+
+
+@app.route('/api/post/compress/<job_id>')
+def post_compress_status(job_id):
+    cursor = int(request.args.get('cursor', 0))
+    with compress_lock:
+        job = compress_jobs.get(job_id)
+        if not job:
+            return jsonify({'ok': False, 'error': 'Job non trovato'}), 404
+        page, total = job['page'], job['total']
+        elapsed = time.time() - job['started']
+        eta = None
+        # Stima sulla velocità dell'ultimo minuto (le pagine non costano
+        # tutte uguale: scansioni pesanti rallentano), dopo almeno 3 pagine
+        if total and page >= 3 and page < total:
+            smp = job['samples']
+            t0, p0 = smp[0] if smp else (job['started'], 0)
+            dt, dp = time.time() - t0, page - p0
+            if dp > 0 and dt > 5:
+                eta = dt / dp * (total - page)
+            else:
+                eta = elapsed / page * (total - page)
+        resp = {
+            'ok': True,
+            'status': job['status'],
+            'page': page,
+            'total': total,
+            'percent': round(page * 100 / total, 1) if total else 0,
+            'elapsed': _fmt_duration(elapsed),
+            'eta': _fmt_duration(eta) if eta is not None else None,
+            'log': job['log'][cursor:],
+            'cursor': len(job['log']),
+            'result': job['result'],
+        }
+    return jsonify(resp)
+
+
+@app.route('/api/post/compress/<job_id>/cancel', methods=['POST'])
+def post_compress_cancel(job_id):
+    with compress_lock:
+        job = compress_jobs.get(job_id)
+        if job:
+            job['cancelled'] = True
+    return jsonify({'ok': True})
 
 
 @app.route('/api/post/split-size', methods=['POST'])
@@ -1054,11 +1169,18 @@ def shutdown():
     with jobs_lock:
         running = [j for j in jobs.values()
                    if j.get('status') == 'running' and not j.get('cancelled')]
+        running += [j for j in compress_jobs.values()
+                    if j.get('status') == 'running' and not j.get('cancelled')]
     if running and not (request.get_json(silent=True) or {}).get('force'):
         return jsonify({'ok': False, 'running': len(running)}), 409
 
     def _bye():
-        time.sleep(0.5)
+        # Annulla le compressioni: il watchdog uccide Ghostscript (che gira in
+        # una sessione separata e altrimenti sopravviverebbe all'app)
+        with compress_lock:
+            for j in compress_jobs.values():
+                j['cancelled'] = True
+        time.sleep(1.0)
         os._exit(0)
 
     threading.Thread(target=_bye, daemon=True).start()

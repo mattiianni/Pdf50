@@ -1396,3 +1396,13 @@ body {
   .ops-grid { grid-template-columns: 1fr; }
   .postproc-btns { flex-direction: column; }
 }
+
+/* ── Avanzamento compressione nella post-elaborazione ───── */
+.pp-progress { margin-top: 16px; }
+.pp-progress .log-panel { max-height: 180px; }
+.pp-progress-label { font-weight: 600; font-size: 14px; }
+
+/* ── Log copiato nella scheda risultato ─────────────────── */
+.result-log { margin-top: 16px; }
+.result-log summary { cursor: pointer; font-size: 13px; opacity: .75; }
+.result-log .log-panel { max-height: 220px; margin-top: 8px; }

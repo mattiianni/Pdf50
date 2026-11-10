@@ -434,6 +434,20 @@
           <button id="btn-apply-postproc" class="btn-primary" style="margin-top:16px" onclick="applyPostProc()">
             Applica
           </button>
+          <div id="pp-progress" class="pp-progress hidden">
+            <div class="progress-title-row">
+              <span id="pp-progress-label" class="pp-progress-label">Compressione...</span>
+              <button id="pp-progress-cancel" class="btn-cancel" onclick="cancelJob()">Annulla</button>
+            </div>
+            <div class="progress-bar-wrap">
+              <div id="pp-progress-bar" class="progress-bar"></div>
+            </div>
+            <div class="progress-meta"><span id="pp-progress-count" class="progress-count"></span></div>
+            <div class="log-container">
+              <div class="log-header"><span>Log operazioni</span></div>
+              <div id="pp-log-panel" class="log-panel"></div>
+            </div>
+          </div>
           <div id="postproc-result" class="hidden" style="margin-top:12px"></div>
         </div>
       </div>

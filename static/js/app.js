@@ -611,6 +611,71 @@ async function startJob() {
   connectSSE(data.job_id);
 }
 
+// ── Compressione con avanzamento reale (pagina X di N) ───────────────────────
+// ui: { bar, label, count, logPanel }  (id degli elementi da aggiornare)
+async function runCompressJob(body, ui) {
+  const start = await fetch('/api/post/compress', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  const started = await start.json();
+  if (!started.ok) throw new Error(started.error || 'Errore compressione');
+
+  const jobId = started.job_id;
+  state.compressJobId = jobId;
+  const $ = (id) => id ? document.getElementById(id) : null;
+  let cursor = 0;
+
+  try {
+    while (true) {
+      let st;
+      try {
+        const res = await fetch(`/api/post/compress/${jobId}?cursor=${cursor}`);
+        st = await res.json();
+      } catch (e) {
+        throw new Error('Connessione con l\'app persa durante la compressione');
+      }
+      if (!st.ok) throw new Error(st.error || 'Stato compressione non disponibile');
+
+      for (const e of st.log) addLogEntry(e.message, e.level, e.ts, ui.logPanel);
+      cursor = st.cursor;
+
+      if (st.total) {
+        if ($(ui.bar))   $(ui.bar).style.width = `${st.percent}%`;
+        if ($(ui.label)) $(ui.label).textContent =
+          `Compressione: pagina ${st.page} di ${st.total} (${Math.floor(st.percent)}%)`;
+        if ($(ui.count)) $(ui.count).textContent =
+          `${st.elapsed} trascorsi` + (st.eta ? ` · circa ${st.eta} rimanenti` : '');
+      } else if ($(ui.label)) {
+        $(ui.label).textContent = 'Compressione: analisi del PDF...';
+        if ($(ui.count)) $(ui.count).textContent = `${st.elapsed} trascorsi`;
+      }
+
+      if (st.status !== 'running') {
+        const r = st.result || {};
+        if (st.status === 'done') return r;
+        throw new Error(r.error || 'Compressione non riuscita');
+      }
+      await new Promise(res => setTimeout(res, 500));
+    }
+  } finally {
+    state.compressJobId = null;
+  }
+}
+
+function _showBackButton() {
+  const btn = document.getElementById('btn-cancel');
+  btn.style.display = '';
+  btn.textContent = 'Indietro';
+  btn.onclick = () => {
+    btn.textContent = 'Annulla';
+    btn.onclick = cancelJob;
+    document.getElementById('progress-card').classList.add('hidden');
+    document.getElementById('setup-card').classList.remove('hidden');
+    document.getElementById('steps-indicator').classList.remove('hidden');
+  };
+}
+
 // ── Avvio operazione PDF diretta ──────────────────────────────────────────────
 
 async function startPdfOp() {
@@ -624,9 +689,17 @@ async function startPdfOp() {
   document.getElementById('setup-card').classList.add('hidden');
   document.getElementById('steps-indicator').classList.add('hidden');
   document.getElementById('progress-card').classList.remove('hidden');
-  document.getElementById('btn-cancel').style.display = 'none';
-  document.getElementById('progress-bar').style.width = '30%';
+  const isCompress = (op === 'compress' || op === 'compress+split');
+  const cancelBtn = document.getElementById('btn-cancel');
+  cancelBtn.textContent = 'Annulla';
+  cancelBtn.onclick = cancelJob;
+  cancelBtn.style.display = isCompress ? '' : 'none';
+  document.getElementById('progress-bar').style.width = isCompress ? '0%' : '30%';
   document.getElementById('progress-step-label').textContent = 'Elaborazione in corso...';
+  document.getElementById('progress-current-file').textContent = '';
+  document.getElementById('progress-count').textContent = '';
+  clearLog();
+  addLogEntry(`File: ${pdfPath.split('/').pop()}`, 'info');
 
   try {
     let result;
@@ -636,14 +709,12 @@ async function startPdfOp() {
     if (op === 'compress' || op === 'compress+split') {
       const quality = document.querySelector('input[name="quality"]:checked')?.value || 'ebook';
       document.getElementById('progress-step-label').textContent = 'Compressione con Ghostscript...';
-      document.getElementById('progress-bar').style.width = '40%';
 
-      const res  = await fetch('/api/post/compress', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({pdf_path: pdfPath, quality, output_dir: outputDir}),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Errore compressione');
+      const data = await runCompressJob(
+        {pdf_path: pdfPath, quality, output_dir: outputDir},
+        {bar: 'progress-bar', label: 'progress-step-label',
+         count: 'progress-count', logPanel: 'log-panel'});
+      document.getElementById('btn-cancel').style.display = 'none';
 
       if (op === 'compress') {
         result = {type: 'compress', ...data};
@@ -661,7 +732,9 @@ async function startPdfOp() {
       const naming = _collectNaming('naming-ss', 'custom-naming-ss');
 
       document.getElementById('progress-step-label').textContent = 'Divisione per dimensione...';
-      document.getElementById('progress-bar').style.width = '70%';
+      document.getElementById('progress-count').textContent = '';
+      if (op !== 'compress+split') document.getElementById('progress-bar').style.width = '70%';
+      addLogEntry(`Divisione in parti da ${target} MB...`, 'info');
 
       const res  = await fetch('/api/post/split-size', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -669,6 +742,7 @@ async function startPdfOp() {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Errore divisione');
+      addLogEntry(`✓ Creati ${data.parts.length} file`, 'success');
       result = {type: 'split', ...data, compressData: (op === 'compress+split' ?
         {orig_mb: undefined, size_mb: undefined} : undefined)};
     }
@@ -677,6 +751,7 @@ async function startPdfOp() {
     if (op === 'extract-text') {
       document.getElementById('progress-step-label').textContent = 'Estrazione testo...';
       document.getElementById('progress-bar').style.width = '60%';
+      addLogEntry('Estrazione del testo...', 'info');
 
       const res  = await fetch('/api/post/extract-text', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -684,6 +759,7 @@ async function startPdfOp() {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Errore estrazione testo');
+      addLogEntry(`✓ Salvato ${data.filename}`, 'success');
       result = {type: 'extract-text', ...data};
     }
 
@@ -695,6 +771,7 @@ async function startPdfOp() {
 
       document.getElementById('progress-step-label').textContent = 'Divisione per range...';
       document.getElementById('progress-bar').style.width = '70%';
+      addLogEntry(`Divisione in ${ranges.length} intervalli di pagine...`, 'info');
 
       const res  = await fetch('/api/post/split-ranges', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -702,26 +779,39 @@ async function startPdfOp() {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Errore divisione');
+      addLogEntry(`✓ Creati ${data.parts.length} file`, 'success');
       result = {type: 'split-ranges', ...data};
     }
 
     document.getElementById('progress-bar').style.width = '100%';
     document.getElementById('progress-step-label').textContent = 'Completato';
+    document.getElementById('btn-cancel').style.display = 'none';
 
-    setTimeout(() => showPdfOpResult(result, op), 600);
+    setTimeout(() => showPdfOpResult(result, op), 1200);
 
   } catch (e) {
-    document.getElementById('progress-step-label').textContent = 'Errore: ' + e.message;
-    document.getElementById('progress-bar').style.width = '0%';
-    setTimeout(() => {
-      document.getElementById('progress-card').classList.add('hidden');
-      document.getElementById('setup-card').classList.remove('hidden');
-      document.getElementById('steps-indicator').classList.remove('hidden');
-    }, 2000);
+    // Il log resta visibile: si torna indietro solo col pulsante
+    const cancelled = /annullat/i.test(e.message);
+    document.getElementById('progress-step-label').textContent =
+      cancelled ? 'Compressione annullata' : 'Errore: ' + e.message;
+    if (!cancelled) addLogEntry(e.message, 'error');
+    _showBackButton();
   }
 }
 
 function showPdfOpResult(result, op) {
+  const logHtml = document.getElementById('log-panel').innerHTML;
+  _renderPdfOpResult(result, op);
+  if (logHtml.trim()) {
+    const d = document.createElement('details');
+    d.className = 'result-log';
+    d.innerHTML = '<summary>Log operazioni</summary><div class="log-panel"></div>';
+    d.querySelector('.log-panel').innerHTML = logHtml;
+    document.getElementById('result-content').appendChild(d);
+  }
+}
+
+function _renderPdfOpResult(result, op) {
   document.getElementById('progress-card').classList.add('hidden');
   document.getElementById('result-card').classList.remove('hidden');
 
@@ -870,6 +960,7 @@ function showPostProc(op) {
   }
 
   document.getElementById('postproc-result').classList.add('hidden');
+  document.getElementById('pp-progress')?.classList.add('hidden');
   document.getElementById('btn-apply-postproc').disabled = false;
   document.getElementById('btn-apply-postproc').textContent = 'Applica';
 }
@@ -892,12 +983,20 @@ async function applyPostProc() {
     // Compressione
     if (op === 'compress' || op === 'compress+split') {
       const quality = document.querySelector('input[name="pp-quality"]:checked')?.value || 'ebook';
-      const res  = await fetch('/api/post/compress', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({pdf_path: state.resultPdfPath, quality, output_dir: state.outputPath}),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error);
+      const prog = document.getElementById('pp-progress');
+      document.getElementById('pp-log-panel').innerHTML = '';
+      document.getElementById('pp-progress-bar').style.width = '0%';
+      prog.classList.remove('hidden');
+      document.getElementById('pp-progress-cancel').classList.remove('hidden');
+      let data;
+      try {
+        data = await runCompressJob(
+          {pdf_path: state.resultPdfPath, quality, output_dir: state.outputPath},
+          {bar: 'pp-progress-bar', label: 'pp-progress-label',
+           count: 'pp-progress-count', logPanel: 'pp-log-panel'});
+      } finally {
+        document.getElementById('pp-progress-cancel').classList.add('hidden');
+      }
       compressInfo = data;
       workingPdf   = data.output_path;
     }
@@ -1059,9 +1158,10 @@ function setActiveStep(stepNum, label) {
   state.currentStep = stepNum;
 }
 
-function addLogEntry(message, level = 'info', ts = null) {
+function addLogEntry(message, level = 'info', ts = null, panelId = 'log-panel') {
   if (!message || !message.trim()) return;
-  const panel = document.getElementById('log-panel');
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
   const entry = document.createElement('div');
   let displayLevel = level;
   if (message.startsWith('✓') || message.startsWith('✔')) displayLevel = 'success';
@@ -1253,6 +1353,12 @@ function handleFatalError(event) {
 }
 
 async function cancelJob() {
+  if (state.compressJobId) {
+    if (!confirm('Vuoi annullare la compressione in corso?')) return;
+    try { await fetch(`/api/post/compress/${state.compressJobId}/cancel`, {method: 'POST'}); } catch (e) {}
+    addLogEntry('Annullamento richiesto...', 'warning');
+    return;
+  }
   if (!state.jobId) return;
   if (!confirm('Vuoi annullare l\'elaborazione in corso?')) return;
   try { await fetch(`/api/jobs/${state.jobId}/cancel`, {method: 'POST'}); } catch (e) {}
